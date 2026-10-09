@@ -8,7 +8,6 @@ import com.cardwise.cardwise_backend.repository.RewardRuleRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -27,13 +26,16 @@ public class RecommendationService {
 
     private final CreditCardRepository creditCardRepository;
     private final RewardRuleRepository rewardRuleRepository;
+        private final RewardCalculationService rewardCalculationService;
 
     public RecommendationService(
             CreditCardRepository creditCardRepository,
-            RewardRuleRepository rewardRuleRepository) {
+                        RewardRuleRepository rewardRuleRepository,
+                        RewardCalculationService rewardCalculationService) {
 
         this.creditCardRepository = creditCardRepository;
         this.rewardRuleRepository = rewardRuleRepository;
+                this.rewardCalculationService = rewardCalculationService;
     }
 
     public List<Map<String, Object>> recommend(
@@ -87,59 +89,11 @@ public class RecommendationService {
             BigDecimal monthlyAmount = monthlySpending.get(category);
             RewardRule rule = rulesByCategory.get(category);
 
-            BigDecimal annualSpending =
-                    monthlyAmount.multiply(BigDecimal.valueOf(12));
-
             BigDecimal categoryReward;
-
-            if (rule.getSpendingCap() == null) {
-                // Existing behavior for uncapped cards.
-                categoryReward = annualSpending
-                        .multiply(rule.getRewardRate())
-                        .divide(
-                                BigDecimal.valueOf(100),
-                                2,
-                                RoundingMode.HALF_UP
-                        );
-            } else {
-                BigDecimal annualCap;
-
-                if ("MONTHLY".equals(rule.getCapPeriod())) {
-                    annualCap = rule.getSpendingCap()
-                            .multiply(BigDecimal.valueOf(12));
-                } else if ("ANNUAL".equals(rule.getCapPeriod())) {
-                    annualCap = rule.getSpendingCap();
-                } else {
-                    throw new IllegalArgumentException(
-                            "Unsupported cap period: " +
-                                    rule.getCapPeriod()
-                    );
-                }
-
-                if (rule.getBaseRewardRate() == null) {
-                    throw new IllegalArgumentException(
-                            "Fallback reward rate is required for capped rules"
-                    );
-                }
-
-                BigDecimal eligibleSpending =
-                        annualSpending.min(annualCap);
-                BigDecimal excessSpending =
-                        annualSpending.subtract(eligibleSpending);
-
-                BigDecimal cappedReward = eligibleSpending
-                        .multiply(rule.getRewardRate());
-                BigDecimal fallbackReward = excessSpending
-                        .multiply(rule.getBaseRewardRate());
-
-                categoryReward = cappedReward
-                        .add(fallbackReward)
-                        .divide(
-                                BigDecimal.valueOf(100),
-                                2,
-                                RoundingMode.HALF_UP
-                        );
-            }
+            categoryReward = rewardCalculationService.calculateAnnualReward(
+                    rule,
+                    monthlyAmount
+            );
 
             annualReward = annualReward.add(categoryReward);
             rewardBreakdown.put(category, categoryReward);

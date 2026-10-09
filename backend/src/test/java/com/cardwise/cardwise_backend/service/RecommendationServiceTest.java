@@ -31,9 +31,13 @@ class RecommendationServiceTest {
 
     @BeforeEach
     void setUp() {
+        RewardCalculationService rewardCalculationService =
+                new RewardCalculationService();
+
         recommendationService = new RecommendationService(
                 creditCardRepository,
-                rewardRuleRepository
+                rewardRuleRepository,
+                rewardCalculationService
         );
     }
 
@@ -300,6 +304,71 @@ class RecommendationServiceTest {
                 new BigDecimal("276.00").compareTo(
                         breakdown.get("GROCERIES")
                 )
+        );
+    }
+
+    @Test
+    void shouldRoundEachCategoryBeforeCalculatingAnnualTotal() {
+        CreditCard cashbackCard =
+                card(10L, "Precision Cashback", "CASHBACK", "0");
+
+        List<RewardRule> rules = List.of(
+                rule("GROCERIES", "1"),
+                rule("GAS", "1"),
+                rule("DINING", "1"),
+                rule("TRAVEL", "1"),
+                rule("OTHER", "1")
+        );
+
+        when(creditCardRepository.findAll())
+                .thenReturn(List.of(cashbackCard));
+
+        when(rewardRuleRepository.findByCreditCardId(10L))
+                .thenReturn(rules);
+
+        Map<String, BigDecimal> monthlySpending = Map.of(
+                "GROCERIES", new BigDecimal("0.0416666667"),
+                "GAS", new BigDecimal("0.0416666667"),
+                "DINING", new BigDecimal("0.0416666667"),
+                "TRAVEL", BigDecimal.ZERO,
+                "OTHER", BigDecimal.ZERO
+        );
+
+        List<Map<String, Object>> results =
+                recommendationService.recommend(monthlySpending);
+
+        assertEquals(1, results.size());
+
+        Map<String, Object> result = results.get(0);
+
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> breakdown =
+                (Map<String, BigDecimal>) result.get("rewardBreakdown");
+
+        assertEquals(
+                0,
+                new BigDecimal("0.01")
+                        .compareTo(breakdown.get("GROCERIES"))
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("0.01")
+                        .compareTo(breakdown.get("GAS"))
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("0.01")
+                        .compareTo(breakdown.get("DINING"))
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("0.03")
+                        .compareTo(
+                                (BigDecimal) result.get("annualReward")
+                        )
         );
     }
 }
