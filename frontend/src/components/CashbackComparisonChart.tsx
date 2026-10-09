@@ -37,6 +37,7 @@ type SimulationResponse = {
   cardAId: number;
   cardBId: number;
   breakEvenMonthlyGroceries: number | null;
+  breakEvenPoints?: number[];
   status: string;
   recommendation: string;
   points: SimulationPoint[];
@@ -187,10 +188,21 @@ export default function CashbackComparisonChart({
         point.rewards[String(second.id)] ?? null,
     })) ?? [];
 
-  const chartBreakEven =
-    simulation?.status === "BREAK_EVEN_FOUND"
-      ? simulation.breakEvenMonthlyGroceries
-      : null;
+  const chartBreakEvenPoints = simulation?.breakEvenPoints?.length
+    ? [...new Set(simulation.breakEvenPoints)].sort((a, b) => a - b)
+    : simulation?.breakEvenMonthlyGroceries !== null &&
+        simulation?.breakEvenMonthlyGroceries !== undefined &&
+        (simulation.status === "BREAK_EVEN_FOUND" ||
+          simulation.status === "MULTIPLE_CROSSOVERS")
+      ? [simulation.breakEvenMonthlyGroceries]
+      : [];
+
+  const visibleBreakEvenPoints = chartBreakEvenPoints.filter(
+    (point) => point >= 0 && point <= sliderMax
+  );
+  const outsideRangeBreakEvenPoints = chartBreakEvenPoints.filter(
+    (point) => point < 0 || point > sliderMax
+  );
 
   return (
     <div className="cashback-comparison-chart">
@@ -269,30 +281,46 @@ export default function CashbackComparisonChart({
                 isAnimationActive={false}
               />
 
-              {chartBreakEven !== null &&
-                chartBreakEven >= 0 &&
-                chartBreakEven <= sliderMax && (
+              {visibleBreakEvenPoints.map((chartBreakEven, index) => (
                   <ReferenceLine
+                    key={`break-even-${chartBreakEven}`}
                     x={chartBreakEven}
                     stroke="#dc2626"
                     strokeDasharray="5 5"
                     label={{
                       value: `Break-even ${money(chartBreakEven)}`,
-                      position: "insideTopRight",
+                      position: index % 2 === 0
+                        ? "insideTopRight"
+                        : "insideTopLeft",
                       fill: "#dc2626",
                       fontSize: 11,
                     }}
                   />
-                )}
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
       )}
 
       {!loading && !error && simulation && (
-        <p className="simulator-chart-note">
-          {simulation.recommendation}
-        </p>
+        <>
+          <p className="simulator-chart-note">
+            {simulation.recommendation}
+          </p>
+
+          {chartBreakEvenPoints.length > 0 && (
+            <p className="simulator-chart-note">
+              Break-even points: {chartBreakEvenPoints
+                .map((point) => money(point))
+                .join(", ")} / month
+              {outsideRangeBreakEvenPoints.length > 0 && (
+                <>; {outsideRangeBreakEvenPoints
+                  .map((point) => money(point))
+                  .join(", ")} outside the visible chart range</>
+              )}
+            </p>
+          )}
+        </>
       )}
     </div>
   );

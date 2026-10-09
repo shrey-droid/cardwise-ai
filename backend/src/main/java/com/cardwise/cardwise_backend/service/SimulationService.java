@@ -83,37 +83,54 @@ public class SimulationService {
                         monthlySpending
                 );
 
-        BigDecimal breakEven = null;
-        if ("BREAK_EVEN_FOUND".equals(
-                breakEvenResult.get("status"))) {
-            Object threshold =
-                    breakEvenResult.get("breakEvenMonthlyGroceries");
+                // Preserve the original single-crossover field.
+                BigDecimal breakEven = toBigDecimal(
+                                breakEvenResult.get("breakEvenMonthlyGroceries")
+                );
 
-            if (threshold != null) {
-                breakEven = new BigDecimal(threshold.toString());
-            }
-        }
+                // New API responses may contain multiple crossover points.
+                // Older mocked responses may only contain the original field.
+                List<BigDecimal> breakEvenPoints = new ArrayList<>();
+                Object rawPoints = breakEvenResult.get("breakEvenPoints");
 
-        if (breakEven != null &&
-                breakEven.compareTo(BigDecimal.ZERO) >= 0 &&
-                breakEven.compareTo(maxGroceries) <= 0) {
+                if (rawPoints instanceof List<?> rawList) {
+                        for (Object rawPoint : rawList) {
+                                if (rawPoint != null) {
+                                        breakEvenPoints.add(toBigDecimal(rawPoint));
+                                }
+                        }
+                } else if (breakEven != null) {
+                        breakEvenPoints.add(breakEven);
+                }
 
-            final BigDecimal thresholdToCheck = breakEven;
-            boolean alreadyExists = points.stream().anyMatch(
-                    point -> new BigDecimal(
-                            point.get("groceries").toString()
-                    ).compareTo(thresholdToCheck) == 0
-            );
+                // Normalize the crossover list: sorted and unique.
+                breakEvenPoints = breakEvenPoints.stream()
+                                .distinct()
+                                .sorted()
+                                .toList();
 
-            if (!alreadyExists) {
-                points.add(calculatePoint(
-                        monthlySpending,
-                        breakEven,
-                        cardAId,
-                        cardBId
-                ));
-            }
-        }
+                // Insert every crossover inside the simulation range.
+                for (BigDecimal crossover : breakEvenPoints) {
+                        if (crossover.compareTo(BigDecimal.ZERO) < 0 ||
+                                        crossover.compareTo(maxGroceries) > 0) {
+                                continue;
+                        }
+
+                        boolean alreadyExists = points.stream().anyMatch(
+                                        point -> new BigDecimal(
+                                                        point.get("groceries").toString()
+                                        ).compareTo(crossover) == 0
+                        );
+
+                        if (!alreadyExists) {
+                                points.add(calculatePoint(
+                                                monthlySpending,
+                                                crossover,
+                                                cardAId,
+                                                cardBId
+                                ));
+                        }
+                }
 
         points.sort((a, b) -> {
             BigDecimal aGroceries =
@@ -129,6 +146,7 @@ public class SimulationService {
         result.put("cardAId", cardAId);
         result.put("cardBId", cardBId);
         result.put("breakEvenMonthlyGroceries", breakEven);
+        result.put("breakEvenPoints", breakEvenPoints);
         result.put("status", breakEvenResult.get("status"));
         result.put("recommendation", breakEvenResult.get("recommendation"));
         // Keep the earlier response keys available for existing clients.
@@ -173,4 +191,16 @@ public class SimulationService {
 
         return point;
     }
+
+        private BigDecimal toBigDecimal(Object value) {
+                if (value == null) {
+                        return null;
+                }
+
+                if (value instanceof BigDecimal decimal) {
+                        return decimal;
+                }
+
+                return new BigDecimal(value.toString());
+        }
 }

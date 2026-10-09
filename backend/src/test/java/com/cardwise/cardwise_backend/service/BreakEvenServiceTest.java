@@ -28,13 +28,17 @@ class BreakEvenServiceTest {
     @Mock
     private RewardRuleRepository rewardRuleRepository;
 
+        private RewardCalculationService rewardCalculationService;
+
     private BreakEvenService breakEvenService;
 
     @BeforeEach
     void setUp() {
+                rewardCalculationService = new RewardCalculationService();
         breakEvenService = new BreakEvenService(
                 creditCardRepository,
-                rewardRuleRepository
+                rewardRuleRepository,
+                rewardCalculationService
         );
     }
 
@@ -224,6 +228,79 @@ class BreakEvenServiceTest {
         assertNull(result.get("breakEvenMonthlyGroceries"));
         assertTrue(result.get("recommendation")
                 .toString().contains("High Cashback Card"));
+    }
+
+    @Test
+    void shouldFindMultipleCrossoversAcrossMonthlyGroceryCap() {
+        CreditCard cappedCard =
+                card(1L, "Capped Grocery Card", "40.00");
+        CreditCard flatCard =
+                card(2L, "Flat Cashback Card", "0.00");
+
+        RewardRule cappedGroceries = rule("GROCERIES", "4.00");
+        lenient().when(cappedGroceries.getSpendingCap())
+                .thenReturn(new BigDecimal("500.00"));
+        lenient().when(cappedGroceries.getCapPeriod())
+                .thenReturn("MONTHLY");
+        lenient().when(cappedGroceries.getBaseRewardRate())
+                .thenReturn(new BigDecimal("1.00"));
+
+        RewardRule flatGroceries = rule("GROCERIES", "2.00");
+        List<RewardRule> cappedRules = List.of(
+                cappedGroceries,
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+        List<RewardRule> flatRules = List.of(
+                flatGroceries,
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+
+        when(creditCardRepository.findById(1L))
+                .thenReturn(Optional.of(cappedCard));
+        when(creditCardRepository.findById(2L))
+                .thenReturn(Optional.of(flatCard));
+        when(rewardRuleRepository.findByCreditCardId(1L))
+                .thenReturn(cappedRules);
+        when(rewardRuleRepository.findByCreditCardId(2L))
+                .thenReturn(flatRules);
+
+        Map<String, BigDecimal> cappedSpending = Map.of(
+                "GROCERIES", new BigDecimal("800"),
+                "GAS", BigDecimal.ZERO,
+                "DINING", BigDecimal.ZERO,
+                "TRAVEL", BigDecimal.ZERO,
+                "OTHER", BigDecimal.ZERO
+        );
+
+        Map<String, Object> result =
+                breakEvenService.calculateBreakEven(
+                        1L, 2L, cappedSpending
+                );
+
+        assertEquals("MULTIPLE_CROSSOVERS", result.get("status"));
+        assertAmount(
+                "166.67",
+                result.get("breakEvenMonthlyGroceries")
+        );
+
+        @SuppressWarnings("unchecked")
+        List<BigDecimal> breakEvenPoints =
+                (List<BigDecimal>) result.get("breakEvenPoints");
+
+        assertNotNull(breakEvenPoints);
+        assertEquals(2, breakEvenPoints.size());
+        assertAmount("166.67", breakEvenPoints.get(0));
+        assertAmount("1166.67", breakEvenPoints.get(1));
+        assertAmount(
+                "366.67",
+                result.get("additionalMonthlyGroceries")
+        );
     }
 
     @Test

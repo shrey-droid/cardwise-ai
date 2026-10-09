@@ -329,6 +329,71 @@ class SimulationServiceTest {
     }
 
     @Test
+    void shouldInsertBothCrossoverPoints() {
+        mockRecommendations();
+
+        Map<String, Object> breakEvenResult = new HashMap<>();
+        breakEvenResult.put("status", "MULTIPLE_CROSSOVERS");
+        breakEvenResult.put(
+                "breakEvenMonthlyGroceries",
+                amount("166.67")
+        );
+        breakEvenResult.put(
+                "breakEvenPoints",
+                List.of(
+                        amount("166.67"),
+                        amount("1166.67")
+                )
+        );
+        breakEvenResult.put(
+                "recommendation",
+                "Two crossover points found."
+        );
+
+        when(breakEvenService.calculateBreakEven(
+                eq(2L),
+                eq(1L),
+                anyMap()
+        )).thenReturn(breakEvenResult);
+
+        Map<String, Object> result =
+                simulationService.simulateGroceries(
+                        spending(),
+                        amount("1500"),
+                        2L,
+                        1L
+                );
+
+        List<Map<String, Object>> simulationPoints = points(result);
+
+        // 21 regular points + 2 crossover points.
+        assertEquals(23, simulationPoints.size());
+
+        assertTrue(simulationPoints.stream().anyMatch(point ->
+                amount("166.67").compareTo(
+                        (BigDecimal) point.get("groceries")
+                ) == 0
+        ));
+
+        assertTrue(simulationPoints.stream().anyMatch(point ->
+                amount("1166.67").compareTo(
+                        (BigDecimal) point.get("groceries")
+                ) == 0
+        ));
+
+        assertEquals("MULTIPLE_CROSSOVERS", result.get("status"));
+        assertAmount("166.67", result.get("breakEvenMonthlyGroceries"));
+
+        @SuppressWarnings("unchecked")
+        List<BigDecimal> crossovers =
+                (List<BigDecimal>) result.get("breakEvenPoints");
+
+        assertEquals(2, crossovers.size());
+        assertAmount("166.67", crossovers.get(0));
+        assertAmount("1166.67", crossovers.get(1));
+    }
+
+    @Test
     void shouldRejectInvalidInputs() {
         assertThrows(
                 IllegalArgumentException.class,
