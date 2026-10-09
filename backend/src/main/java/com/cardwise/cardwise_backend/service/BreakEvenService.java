@@ -23,9 +23,6 @@ public class BreakEvenService {
     private static final BigDecimal TWELVE = BigDecimal.valueOf(12);
     private static final int PRECISION = 12;
 
-    private static final List<String> OTHER_CATEGORIES =
-            List.of("GAS", "DINING", "TRAVEL", "OTHER");
-
     private final CreditCardRepository creditCardRepository;
     private final RewardRuleRepository rewardRuleRepository;
     private final RewardCalculationService rewardCalculationService;
@@ -392,7 +389,7 @@ public class BreakEvenService {
     ) {
         BigDecimal total = BigDecimal.ZERO;
 
-        for (String category : OTHER_CATEGORIES) {
+        for (String category : SpendingCategories.FIXED) {
             BigDecimal monthlyAmount =
                     getRequiredSpending(monthlySpending, category);
             RewardRule rule = getRequiredRule(rules, category);

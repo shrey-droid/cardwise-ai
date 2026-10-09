@@ -16,14 +16,6 @@ import java.util.Map;
 @Service
 public class RecommendationService {
 
-    private static final List<String> CATEGORIES = List.of(
-            "GROCERIES",
-            "GAS",
-            "DINING",
-            "TRAVEL",
-            "OTHER"
-    );
-
     private final CreditCardRepository creditCardRepository;
     private final RewardRuleRepository rewardRuleRepository;
         private final RewardCalculationService rewardCalculationService;
@@ -45,7 +37,7 @@ public class RecommendationService {
             Map<String, BigDecimal> monthlySpending) {
 
         // Validate spending amounts
-        for (String category : CATEGORIES) {
+        for (String category : SpendingCategories.ALL) {
             BigDecimal amount = monthlySpending.get(category);
 
             if (amount == null || amount.signum() < 0) {
@@ -81,14 +73,15 @@ public class RecommendationService {
         }
 
         // Exclude cards with incomplete reward rules
-        if (!rulesByCategory.keySet().containsAll(CATEGORIES)) {
+        if (!rulesByCategory.keySet()
+                .containsAll(SpendingCategories.ALL)) {
             return null;
         }
 
         BigDecimal annualReward = BigDecimal.ZERO;
         Map<String, BigDecimal> rewardBreakdown = new HashMap<>();
 
-        for (String category : CATEGORIES) {
+        for (String category : SpendingCategories.ALL) {
 
             BigDecimal monthlyAmount = monthlySpending.get(category);
             RewardRule rule = rulesByCategory.get(category);
