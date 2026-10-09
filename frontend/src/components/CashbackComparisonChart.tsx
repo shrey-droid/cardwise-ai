@@ -5,6 +5,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -31,6 +32,11 @@ type SimulationPoint = {
   rewards: Record<string, number>;
 };
 
+type TieInterval = {
+  start: number;
+  end: number | null;
+};
+
 type SimulationResponse = {
   category: string;
   maxGroceries: number;
@@ -38,6 +44,7 @@ type SimulationResponse = {
   cardBId: number;
   breakEvenMonthlyGroceries: number | null;
   breakEvenPoints?: number[];
+  tieIntervals?: TieInterval[];
   status: string;
   recommendation: string;
   points: SimulationPoint[];
@@ -203,6 +210,14 @@ export default function CashbackComparisonChart({
   const outsideRangeBreakEvenPoints = chartBreakEvenPoints.filter(
     (point) => point < 0 || point > sliderMax
   );
+  const tieIntervals = simulation?.tieIntervals ?? [];
+
+  const visibleTieIntervals = tieIntervals
+    .map((interval) => ({
+      start: Math.max(0, interval.start),
+      end: Math.min(sliderMax, interval.end ?? sliderMax),
+    }))
+    .filter((interval) => interval.start < interval.end);
 
   return (
     <div className="cashback-comparison-chart">
@@ -230,6 +245,18 @@ export default function CashbackComparisonChart({
               }}
             >
               <CartesianGrid strokeDasharray="3 3" />
+
+              {visibleTieIntervals.map((interval, index) => (
+                <ReferenceArea
+                  key={`tie-interval-${index}`}
+                  x1={interval.start}
+                  x2={interval.end}
+                  fill="#a78bfa"
+                  fillOpacity={0.16}
+                  strokeOpacity={0}
+                  ifOverflow="hidden"
+                />
+              ))}
 
               <XAxis
                 dataKey="groceries"
@@ -319,6 +346,22 @@ export default function CashbackComparisonChart({
                   .join(", ")} outside the visible chart range</>
               )}
             </p>
+          )}
+
+          {tieIntervals.length > 0 && (
+            <div className="simulator-chart-note">
+              <strong>Equal cashback ranges:</strong>
+              <ul>
+                {tieIntervals.map((interval, index) => (
+                  <li key={`${interval.start}-${index}`}>
+                    {money(interval.start)} to{" "}
+                    {interval.end === null
+                      ? "any higher monthly grocery spending"
+                      : money(interval.end)}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </>
       )}

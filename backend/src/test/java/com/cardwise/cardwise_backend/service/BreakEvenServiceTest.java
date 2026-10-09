@@ -342,6 +342,249 @@ class BreakEvenServiceTest {
     }
 
     @Test
+    void shouldDeduplicateCrossoverAtMonthlyCapBoundary() {
+        CreditCard cappedCard =
+                card(1L, "Capped Grocery Card", "120.00");
+        CreditCard flatCard =
+                card(2L, "Flat Cashback Card", "0.00");
+
+        RewardRule cappedGroceries = rule("GROCERIES", "4.00");
+        lenient().when(cappedGroceries.getSpendingCap())
+                .thenReturn(new BigDecimal("500.00"));
+        lenient().when(cappedGroceries.getCapPeriod())
+                .thenReturn("MONTHLY");
+        lenient().when(cappedGroceries.getBaseRewardRate())
+                .thenReturn(new BigDecimal("1.00"));
+
+        RewardRule flatGroceries = rule("GROCERIES", "2.00");
+        List<RewardRule> cappedRules = List.of(
+                cappedGroceries,
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+        List<RewardRule> flatRules = List.of(
+                flatGroceries,
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+
+        when(creditCardRepository.findById(1L))
+                .thenReturn(Optional.of(cappedCard));
+        when(creditCardRepository.findById(2L))
+                .thenReturn(Optional.of(flatCard));
+        when(rewardRuleRepository.findByCreditCardId(1L))
+                .thenReturn(cappedRules);
+        when(rewardRuleRepository.findByCreditCardId(2L))
+                .thenReturn(flatRules);
+
+        Map<String, BigDecimal> cappedSpending = Map.of(
+                "GROCERIES", new BigDecimal("400"),
+                "GAS", BigDecimal.ZERO,
+                "DINING", BigDecimal.ZERO,
+                "TRAVEL", BigDecimal.ZERO,
+                "OTHER", BigDecimal.ZERO
+        );
+
+        Map<String, Object> result =
+                breakEvenService.calculateBreakEven(
+                        1L, 2L, cappedSpending
+                );
+
+        assertEquals("BREAK_EVEN_FOUND", result.get("status"));
+        assertAmount("500.00", result.get("breakEvenMonthlyGroceries"));
+        assertAmount("100.00", result.get("additionalMonthlyGroceries"));
+
+        @SuppressWarnings("unchecked")
+        List<BigDecimal> breakEvenPoints =
+                (List<BigDecimal>) result.get("breakEvenPoints");
+
+        assertEquals(1, breakEvenPoints.size());
+        assertAmount("500.00", breakEvenPoints.get(0));
+    }
+
+    @Test
+    void shouldHandleIdenticalRewardCurves() {
+        mockCustomGroceryCards(
+                "2.00", "0.00",
+                "2.00", "0.00"
+        );
+
+        Map<String, Object> result =
+                breakEvenService.calculateBreakEven(
+                        1L, 2L, spending("400")
+                );
+
+        assertEquals("NO_CROSSOVER", result.get("status"));
+        assertNull(result.get("breakEvenMonthlyGroceries"));
+        assertNull(result.get("additionalMonthlyGroceries"));
+
+        @SuppressWarnings("unchecked")
+        List<BigDecimal> points =
+                (List<BigDecimal>) result.get("breakEvenPoints");
+
+        assertNotNull(points);
+        assertTrue(points.isEmpty());
+        assertTrue(result.get("recommendation")
+                .toString().contains("same net rewards"));
+    }
+
+    @Test
+    void shouldDetectUnboundedTieIntervalAfterMonthlyCap() {
+        CreditCard cappedCard =
+                card(1L, "Capped Grocery Card", "120.00");
+        CreditCard flatCard =
+                card(2L, "Flat Cashback Card", "0.00");
+
+        RewardRule cappedGroceries = rule("GROCERIES", "4.00");
+
+        lenient().when(cappedGroceries.getSpendingCap())
+                .thenReturn(new BigDecimal("500.00"));
+        lenient().when(cappedGroceries.getCapPeriod())
+                .thenReturn("MONTHLY");
+        lenient().when(cappedGroceries.getBaseRewardRate())
+                .thenReturn(new BigDecimal("2.00"));
+
+        RewardRule flatGroceries = rule("GROCERIES", "2.00");
+
+        List<RewardRule> cappedRules = List.of(
+                cappedGroceries,
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+
+        List<RewardRule> flatRules = List.of(
+                flatGroceries,
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+
+        when(creditCardRepository.findById(1L))
+                .thenReturn(Optional.of(cappedCard));
+        when(creditCardRepository.findById(2L))
+                .thenReturn(Optional.of(flatCard));
+
+        when(rewardRuleRepository.findByCreditCardId(1L))
+                .thenReturn(cappedRules);
+        when(rewardRuleRepository.findByCreditCardId(2L))
+                .thenReturn(flatRules);
+
+        Map<String, BigDecimal> monthlySpending = Map.of(
+                "GROCERIES", new BigDecimal("400"),
+                "GAS", BigDecimal.ZERO,
+                "DINING", BigDecimal.ZERO,
+                "TRAVEL", BigDecimal.ZERO,
+                "OTHER", BigDecimal.ZERO
+        );
+
+        Map<String, Object> result =
+                breakEvenService.calculateBreakEven(
+                        1L, 2L, monthlySpending
+                );
+
+        assertEquals("TIE_INTERVAL", result.get("status"));
+        assertAmount(
+                "500.00",
+                result.get("breakEvenMonthlyGroceries")
+        );
+        assertAmount(
+                "100.00",
+                result.get("additionalMonthlyGroceries")
+        );
+
+        @SuppressWarnings("unchecked")
+        List<BigDecimal> breakEvenPoints =
+                (List<BigDecimal>) result.get("breakEvenPoints");
+
+        assertNotNull(breakEvenPoints);
+        assertTrue(
+                breakEvenPoints.isEmpty(),
+                "A tie interval must not be represented as isolated crossovers"
+        );
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, BigDecimal>> tieIntervals =
+                (List<Map<String, BigDecimal>>) result.get("tieIntervals");
+
+        assertNotNull(tieIntervals);
+        assertEquals(1, tieIntervals.size());
+
+        assertAmount("500.00", tieIntervals.get(0).get("start"));
+        assertNull(tieIntervals.get(0).get("end"));
+    }
+
+    @Test
+    void shouldMergeAdjacentTieIntervals() {
+        CreditCard cardA = card(1L, "Card A", "0");
+        CreditCard cardB = card(2L, "Card B", "0");
+
+        RewardRule groceryA = rule("GROCERIES", "2");
+        RewardRule groceryB = rule("GROCERIES", "2");
+
+        lenient().when(groceryA.getSpendingCap())
+                .thenReturn(new BigDecimal("500"));
+        lenient().when(groceryA.getCapPeriod())
+                .thenReturn("MONTHLY");
+        lenient().when(groceryA.getBaseRewardRate())
+                .thenReturn(new BigDecimal("2"));
+
+        lenient().when(groceryB.getSpendingCap())
+                .thenReturn(new BigDecimal("800"));
+        lenient().when(groceryB.getCapPeriod())
+                .thenReturn("MONTHLY");
+        lenient().when(groceryB.getBaseRewardRate())
+                .thenReturn(new BigDecimal("2"));
+
+        List<RewardRule> rulesA = List.of(
+                groceryA,
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+
+        List<RewardRule> rulesB = List.of(
+                groceryB,
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+
+        when(creditCardRepository.findById(1L))
+                .thenReturn(Optional.of(cardA));
+        when(creditCardRepository.findById(2L))
+                .thenReturn(Optional.of(cardB));
+
+        when(rewardRuleRepository.findByCreditCardId(1L))
+                .thenReturn(rulesA);
+        when(rewardRuleRepository.findByCreditCardId(2L))
+                .thenReturn(rulesB);
+
+        Map<String, Object> result =
+                breakEvenService.calculateBreakEven(
+                        1L, 2L, spending("400")
+                );
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, BigDecimal>> intervals =
+                (List<Map<String, BigDecimal>>) result.get("tieIntervals");
+
+        assertNotNull(intervals);
+        assertEquals(1, intervals.size());
+
+        assertAmount("0", intervals.get(0).get("start"));
+        assertNull(intervals.get(0).get("end"));
+    }
+
+    @Test
     void shouldCalculateFractionalCentBreakEvenPrecisely() {
         mockCustomGroceryCards(
                 "3.00", "10.00",

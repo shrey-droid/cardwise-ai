@@ -85,6 +85,7 @@ public class BreakEvenService {
 
         List<BigDecimal> intervals = new ArrayList<>(boundaries);
         TreeSet<BigDecimal> crossoverPoints = new TreeSet<>();
+        List<Map<String, BigDecimal>> tieIntervals = new ArrayList<>();
         boolean sameSlopeEverywhere = true;
 
         // Solve each bounded interval.
@@ -98,6 +99,14 @@ public class BreakEvenService {
             BigDecimal rightDifference = difference(
                     groceryA, groceryB, fixedNetA, fixedNetB, right
             );
+
+                        if (leftDifference.signum() == 0 &&
+                                        rightDifference.signum() == 0) {
+                                Map<String, BigDecimal> tieInterval = new HashMap<>();
+                                tieInterval.put("start", left);
+                                tieInterval.put("end", right);
+                                tieIntervals.add(tieInterval);
+                        }
 
             if (leftDifference.compareTo(rightDifference) != 0) {
                 sameSlopeEverywhere = false;
@@ -129,12 +138,39 @@ public class BreakEvenService {
             sameSlopeEverywhere = false;
         }
 
+                if (lastDifference.signum() == 0 &&
+                                nextDifference.signum() == 0) {
+                        Map<String, BigDecimal> tieInterval = new HashMap<>();
+                        tieInterval.put("start", lastBoundary);
+                        tieInterval.put("end", null);
+                        tieIntervals.add(tieInterval);
+                }
+
         addRootOnFinalInterval(
                 crossoverPoints,
                 lastBoundary,
                 lastDifference,
                 nextDifference
         );
+
+        tieIntervals = normalizeTieIntervals(tieIntervals);
+
+        // A continuous tie is not an isolated crossover.
+                for (Map<String, BigDecimal> tieInterval : tieIntervals) {
+                        BigDecimal start = tieInterval.get("start");
+                        BigDecimal end = tieInterval.get("end");
+
+                        crossoverPoints.removeIf(point ->
+                                        point.compareTo(start) >= 0 &&
+                                                        (end == null || point.compareTo(end) <= 0)
+                        );
+                }
+
+                // Identical reward curves have no distinct crossover thresholds,
+                // even though every sample point is mathematically equal.
+        if (sameSlopeEverywhere) {
+            crossoverPoints.clear();
+        }
 
         List<BigDecimal> roundedPoints = crossoverPoints.stream()
                 .map(point -> point.setScale(2, RoundingMode.HALF_UP))
@@ -147,6 +183,7 @@ public class BreakEvenService {
         result.put("cardB", cardB.getCardName());
         result.put("currentMonthlyGroceries", currentGroceries);
         result.put("breakEvenPoints", roundedPoints);
+        result.put("tieIntervals", tieIntervals);
 
         if (sameSlopeEverywhere) {
             result.put("status", "NO_CROSSOVER");
@@ -180,6 +217,34 @@ public class BreakEvenService {
                     "recommendation",
                     recommendation
             );
+            return result;
+        }
+
+        if (!tieIntervals.isEmpty()) {
+            BigDecimal firstTieStart = tieIntervals.get(0).get("start")
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            BigDecimal nextTieStart = tieIntervals.stream()
+                    .map(interval -> interval.get("start"))
+                    .filter(start -> start.compareTo(currentGroceries) > 0)
+                    .min(Comparator.naturalOrder())
+                    .orElse(null);
+
+            BigDecimal additional = nextTieStart == null
+                    ? BigDecimal.ZERO.setScale(2)
+                    : nextTieStart.subtract(currentGroceries)
+                            .setScale(2, RoundingMode.UP);
+
+            result.put("status", "TIE_INTERVAL");
+            result.put("breakEvenMonthlyGroceries", firstTieStart);
+            result.put("additionalMonthlyGroceries", additional);
+            result.put(
+                    "recommendation",
+                    "Both cards provide equal net rewards over one or " +
+                            "more grocery spending intervals beginning at $" +
+                            firstTieStart + "/month."
+            );
+
             return result;
         }
 
@@ -263,6 +328,43 @@ public class BreakEvenService {
         result.put("recommendation", recommendation);
 
         return result;
+    }
+
+    private List<Map<String, BigDecimal>> normalizeTieIntervals(
+            List<Map<String, BigDecimal>> intervals
+    ) {
+        List<Map<String, BigDecimal>> sortedIntervals = intervals.stream()
+                .sorted(Comparator.comparing(interval -> interval.get("start")))
+                .toList();
+        List<Map<String, BigDecimal>> mergedIntervals = new ArrayList<>();
+
+        for (Map<String, BigDecimal> interval : sortedIntervals) {
+            BigDecimal start = interval.get("start");
+            BigDecimal end = interval.get("end");
+
+            if (mergedIntervals.isEmpty()) {
+                mergedIntervals.add(new HashMap<>(interval));
+                continue;
+            }
+
+            Map<String, BigDecimal> previous =
+                    mergedIntervals.get(mergedIntervals.size() - 1);
+            BigDecimal previousEnd = previous.get("end");
+
+            if (previousEnd == null || start.compareTo(previousEnd) <= 0) {
+                if (previousEnd != null && end != null &&
+                        end.compareTo(previousEnd) > 0) {
+                    previous.put("end", end);
+                }
+                if (previousEnd != null && end == null) {
+                    previous.put("end", null);
+                }
+            } else {
+                mergedIntervals.add(new HashMap<>(interval));
+            }
+        }
+
+        return mergedIntervals;
     }
 
     private Map<String, RewardRule> getRules(Long cardId) {

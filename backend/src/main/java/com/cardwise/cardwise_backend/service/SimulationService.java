@@ -147,6 +147,13 @@ public class SimulationService {
         result.put("cardBId", cardBId);
         result.put("breakEvenMonthlyGroceries", breakEven);
         result.put("breakEvenPoints", breakEvenPoints);
+        Object rawTieIntervals = breakEvenResult.get("tieIntervals");
+        result.put(
+                "tieIntervals",
+                rawTieIntervals instanceof List<?>
+                        ? rawTieIntervals
+                        : List.of()
+        );
         result.put("status", breakEvenResult.get("status"));
         result.put("recommendation", breakEvenResult.get("recommendation"));
         // Keep the earlier response keys available for existing clients.

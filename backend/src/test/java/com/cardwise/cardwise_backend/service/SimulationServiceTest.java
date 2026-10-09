@@ -394,6 +394,102 @@ class SimulationServiceTest {
     }
 
     @Test
+    void shouldPropagateTieIntervalsToSimulationResponse() {
+        mockRecommendations();
+
+        Map<String, Object> breakEvenResult = new HashMap<>();
+        breakEvenResult.put("status", "TIE_INTERVAL");
+        breakEvenResult.put(
+                "recommendation",
+                "Both cards are equal above $500."
+        );
+        breakEvenResult.put(
+                "breakEvenMonthlyGroceries",
+                amount("500.00")
+        );
+        breakEvenResult.put("breakEvenPoints", List.of());
+
+        Map<String, BigDecimal> tieInterval = new HashMap<>();
+        tieInterval.put("start", amount("500.00"));
+        tieInterval.put("end", null);
+        breakEvenResult.put("tieIntervals", List.of(tieInterval));
+
+        when(breakEvenService.calculateBreakEven(
+                eq(1L),
+                eq(2L),
+                anyMap()
+        )).thenReturn(breakEvenResult);
+
+        Map<String, Object> result =
+                simulationService.simulateGroceries(
+                        spending(),
+                        amount("1000"),
+                        1L,
+                        2L
+                );
+
+        assertEquals("TIE_INTERVAL", result.get("status"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, BigDecimal>> intervals =
+                (List<Map<String, BigDecimal>>) result.get("tieIntervals");
+
+        assertNotNull(intervals);
+        assertEquals(1, intervals.size());
+        assertAmount("500.00", intervals.get(0).get("start"));
+        assertNull(intervals.get(0).get("end"));
+
+        @SuppressWarnings("unchecked")
+        List<BigDecimal> crossoverPoints =
+                (List<BigDecimal>) result.get("breakEvenPoints");
+
+        assertTrue(crossoverPoints.isEmpty());
+        assertEquals(21, points(result).size());
+    }
+
+    @Test
+    void shouldDefaultMissingTieIntervalsToEmptyList() {
+        mockRecommendations();
+
+        Map<String, Object> breakEvenResult = new HashMap<>();
+        breakEvenResult.put("status", "BREAK_EVEN_FOUND");
+        breakEvenResult.put("recommendation", "Card A becomes better.");
+        breakEvenResult.put(
+                "breakEvenMonthlyGroceries",
+                amount("500.00")
+        );
+        breakEvenResult.put(
+                "breakEvenPoints",
+                List.of(amount("500.00"))
+        );
+
+        when(breakEvenService.calculateBreakEven(
+                eq(1L),
+                eq(2L),
+                anyMap()
+        )).thenReturn(breakEvenResult);
+
+        Map<String, Object> result =
+                simulationService.simulateGroceries(
+                        spending(),
+                        amount("1000"),
+                        1L,
+                        2L
+                );
+
+        assertEquals("BREAK_EVEN_FOUND", result.get("status"));
+        assertEquals(List.of(), result.get("tieIntervals"));
+
+        @SuppressWarnings("unchecked")
+        List<BigDecimal> crossoverPoints =
+                (List<BigDecimal>) result.get("breakEvenPoints");
+
+        assertEquals(1, crossoverPoints.size());
+        assertAmount("500.00", crossoverPoints.get(0));
+        assertEquals(21, points(result).size());
+    }
+
+    @Test
     void shouldRejectInvalidInputs() {
         assertThrows(
                 IllegalArgumentException.class,
