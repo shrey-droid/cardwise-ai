@@ -120,6 +120,44 @@ class BreakEvenServiceTest {
                 .thenReturn(groceryPlusRewardRules);
     }
 
+    private void mockCustomGroceryCards(
+            String rateA,
+            String feeA,
+            String rateB,
+            String feeB
+    ) {
+        CreditCard cardA = card(1L, "Card A", feeA);
+        CreditCard cardB = card(2L, "Card B", feeB);
+
+        List<RewardRule> rulesA = List.of(
+                rule("GROCERIES", rateA),
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+
+        List<RewardRule> rulesB = List.of(
+                rule("GROCERIES", rateB),
+                rule("GAS", "0"),
+                rule("DINING", "0"),
+                rule("TRAVEL", "0"),
+                rule("OTHER", "0")
+        );
+
+        when(creditCardRepository.findById(1L))
+                .thenReturn(Optional.of(cardA));
+
+        when(creditCardRepository.findById(2L))
+                .thenReturn(Optional.of(cardB));
+
+        when(rewardRuleRepository.findByCreditCardId(1L))
+                .thenReturn(rulesA);
+
+        when(rewardRuleRepository.findByCreditCardId(2L))
+                .thenReturn(rulesB);
+    }
+
     private void assertAmount(
             String expected,
             Object actual
@@ -299,6 +337,52 @@ class BreakEvenServiceTest {
         assertAmount("1166.67", breakEvenPoints.get(1));
         assertAmount(
                 "366.67",
+                result.get("additionalMonthlyGroceries")
+        );
+    }
+
+    @Test
+    void shouldCalculateFractionalCentBreakEvenPrecisely() {
+        mockCustomGroceryCards(
+                "3.00", "10.00",
+                "2.00", "0.00"
+        );
+
+        Map<String, Object> result =
+                breakEvenService.calculateBreakEven(
+                        1L, 2L, spending("50")
+                );
+
+        assertEquals("BREAK_EVEN_FOUND", result.get("status"));
+        assertAmount(
+                "83.33",
+                result.get("breakEvenMonthlyGroceries")
+        );
+        assertAmount(
+                "33.33",
+                result.get("additionalMonthlyGroceries")
+        );
+    }
+
+    @Test
+    void shouldHandleVerySmallRewardRateDifference() {
+        mockCustomGroceryCards(
+                "2.0001", "0.01",
+                "2.0000", "0.00"
+        );
+
+        Map<String, Object> result =
+                breakEvenService.calculateBreakEven(
+                        1L, 2L, spending("500")
+                );
+
+        assertEquals("BREAK_EVEN_FOUND", result.get("status"));
+        assertAmount(
+                "833.33",
+                result.get("breakEvenMonthlyGroceries")
+        );
+        assertAmount(
+                "333.33",
                 result.get("additionalMonthlyGroceries")
         );
     }

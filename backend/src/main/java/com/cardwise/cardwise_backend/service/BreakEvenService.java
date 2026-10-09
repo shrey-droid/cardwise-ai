@@ -99,8 +99,8 @@ public class BreakEvenService {
                     groceryA, groceryB, fixedNetA, fixedNetB, right
             );
 
-                        if (leftDifference.compareTo(rightDifference) != 0) {
-                                sameSlopeEverywhere = false;
+            if (leftDifference.compareTo(rightDifference) != 0) {
+                sameSlopeEverywhere = false;
             }
 
             addRootWithinInterval(
@@ -125,8 +125,8 @@ public class BreakEvenService {
                 lastBoundary.add(BigDecimal.ONE)
         );
 
-                if (lastDifference.compareTo(nextDifference) != 0) {
-                        sameSlopeEverywhere = false;
+        if (lastDifference.compareTo(nextDifference) != 0) {
+            sameSlopeEverywhere = false;
         }
 
         addRootOnFinalInterval(
@@ -285,7 +285,7 @@ public class BreakEvenService {
                     getRequiredSpending(monthlySpending, category);
             RewardRule rule = getRequiredRule(rules, category);
             total = total.add(
-                    rewardCalculationService.calculateAnnualReward(
+                    rewardCalculationService.calculateAnnualRewardPrecise(
                             rule,
                             monthlyAmount
                     )
@@ -303,13 +303,13 @@ public class BreakEvenService {
             BigDecimal monthlyGroceries
     ) {
         BigDecimal netA = fixedNetA.add(
-                rewardCalculationService.calculateAnnualReward(
+                rewardCalculationService.calculateAnnualRewardPrecise(
                         groceryA,
                         monthlyGroceries
                 )
         );
         BigDecimal netB = fixedNetB.add(
-                rewardCalculationService.calculateAnnualReward(
+                rewardCalculationService.calculateAnnualRewardPrecise(
                         groceryB,
                         monthlyGroceries
                 )
