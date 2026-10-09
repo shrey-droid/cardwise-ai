@@ -1,0 +1,8 @@
+CREATE TABLE credit_cards (
+    id BIGSERIAL PRIMARY KEY,
+    card_name VARCHAR(150) NOT NULL,
+    issuer VARCHAR(100) NOT NULL,
+    reward_type VARCHAR(30) NOT NULL,
+    annual_fee NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

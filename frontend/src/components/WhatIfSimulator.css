@@ -1,0 +1,183 @@
+.simulator-slider-container {
+  position: relative;
+  margin-top: 24px;
+}
+
+.simulator-slider-container input[type="range"] {
+  display: block;
+  width: 100%;
+  margin: 0;
+  position: relative;
+  z-index: 2;
+  accent-color: #2563eb;
+}
+
+.break-even-marker {
+  position: absolute;
+  top: 0;
+  height: 28px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.break-even-marker-line {
+  display: block;
+  height: 28px;
+  width: 3px;
+  background: #16a34a;
+  border-radius: 2px;
+}
+
+.simulator-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.simulator-threshold {
+  font-size: 14px;
+  color: #166534 !important;
+  margin-top: 14px;
+}
+
+.simulator-chart {
+  margin-top: 28px;
+  padding: 20px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.simulator-chart h3 {
+  margin: 0 0 20px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.simulator-chart-row {
+  margin-bottom: 18px;
+}
+
+.simulator-chart-row:last-child {
+  margin-bottom: 0;
+}
+
+.simulator-chart-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.simulator-chart-label strong {
+  color: #0f172a;
+}
+
+.simulator-chart-track {
+  width: 100%;
+  height: 16px;
+  background: #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.simulator-chart-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 8px;
+  transition: width 0.25s ease;
+}
+
+.card-selection {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.card-selection-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-selection-field label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.card-selection-field select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.card-selection-field select:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .card-selection {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .simulator-chart {
+    padding: 14px;
+  }
+
+  .simulator-chart-label {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+.cashback-comparison-chart {
+  margin-top: 28px;
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.cashback-comparison-chart h3 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.cashback-comparison-chart p {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.cashback-chart-container {
+  width: 100%;
+  min-height: 320px;
+  margin-top: 20px;
+}
+
+.simulator-chart-note {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 16px;
+}
+
+@media (max-width: 480px) {
+  .cashback-comparison-chart {
+    padding: 12px;
+  }
+}
