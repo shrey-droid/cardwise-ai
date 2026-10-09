@@ -3,20 +3,29 @@ package com.cardwise.cardwise_backend.service;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
 class RecommendationIntegrationTest {
 
     @Autowired
     private RecommendationService recommendationService;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     private Map<String, BigDecimal> spending() {
         return Map.of(
@@ -24,7 +33,10 @@ class RecommendationIntegrationTest {
                 "GAS", new BigDecimal("200"),
                 "DINING", new BigDecimal("300"),
                 "TRAVEL", new BigDecimal("100"),
-                "OTHER", new BigDecimal("400")
+                "OTHER", new BigDecimal("400"),
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
     }
 
@@ -68,4 +80,36 @@ class RecommendationIntegrationTest {
                 "Travel Points Explorer".equals(card.get("cardName"))
         ));
     }
+
+        @Test
+        void shouldAcceptLegacyFiveCategoryRecommendationRequest()
+            throws Exception {
+        mockMvc.perform(get("/api/v1/recommendations")
+                .param("groceries", "0")
+                .param("gas", "0")
+                .param("dining", "0")
+                .param("travel", "0")
+                .param("other", "0"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(2))
+            .andExpect(jsonPath("$[0].rewardBreakdown.EV_CHARGING")
+                .value(0.0));
+        }
+
+        @Test
+        void shouldApplyEvChargingSpendingToItsRewardCategory()
+            throws Exception {
+        mockMvc.perform(get("/api/v1/recommendations")
+                .param("groceries", "0")
+                .param("gas", "0")
+                .param("dining", "0")
+                .param("travel", "0")
+                .param("other", "0")
+                .param("transit", "0")
+                .param("rideshare", "0")
+                .param("evCharging", "100"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].rewardBreakdown.EV_CHARGING")
+                .value(12.0));
+        }
 }

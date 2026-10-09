@@ -49,7 +49,10 @@ class BreakEvenServiceTest {
                 "GAS", new BigDecimal("200"),
                 "DINING", new BigDecimal("300"),
                 "TRAVEL", new BigDecimal("100"),
-                "OTHER", new BigDecimal("400")
+                "OTHER", new BigDecimal("400"),
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
     }
 
@@ -79,23 +82,55 @@ class BreakEvenServiceTest {
     }
 
     private List<RewardRule> everydayRules() {
-        return List.of(
+        return withAdditionalCategoryRules(List.of(
                 rule("GROCERIES", "1"),
                 rule("GAS", "1"),
                 rule("DINING", "1"),
                 rule("TRAVEL", "1"),
                 rule("OTHER", "1")
-        );
+        ));
     }
 
     private List<RewardRule> groceryPlusRules() {
-        return List.of(
+        return withAdditionalCategoryRules(List.of(
                 rule("GROCERIES", "4"),
                 rule("GAS", "2"),
                 rule("DINING", "2"),
                 rule("TRAVEL", "1"),
                 rule("OTHER", "1")
-        );
+        ));
+    }
+
+    private List<RewardRule> withAdditionalCategoryRules(
+            List<RewardRule> existingRules
+    ) {
+        RewardRule otherRule = existingRules.stream()
+                .filter(rule -> "OTHER".equals(rule.getSpendingCategory()))
+                .findFirst()
+                .orElseThrow();
+        BigDecimal otherRate = otherRule.getRewardRate();
+        BigDecimal spendingCap = otherRule.getSpendingCap();
+        String capPeriod = otherRule.getCapPeriod();
+        BigDecimal baseRewardRate = otherRule.getBaseRewardRate();
+        String conditions = otherRule.getConditions();
+
+        return java.util.stream.Stream.concat(
+                existingRules.stream(),
+                List.of("TRANSIT", "RIDESHARE", "EV_CHARGING").stream()
+                        .map(category -> {
+                            RewardRule copiedRule =
+                                    rule(category, otherRate.toString());
+                            lenient().when(copiedRule.getSpendingCap())
+                                    .thenReturn(spendingCap);
+                            lenient().when(copiedRule.getCapPeriod())
+                                    .thenReturn(capPeriod);
+                            lenient().when(copiedRule.getBaseRewardRate())
+                                    .thenReturn(baseRewardRate);
+                            lenient().when(copiedRule.getConditions())
+                                    .thenReturn(conditions);
+                            return copiedRule;
+                        })
+        ).toList();
     }
 
     private void mockCards() {
@@ -131,21 +166,21 @@ class BreakEvenServiceTest {
         CreditCard cardA = card(1L, "Card A", feeA);
         CreditCard cardB = card(2L, "Card B", feeB);
 
-        List<RewardRule> rulesA = List.of(
+        List<RewardRule> rulesA = withAdditionalCategoryRules(List.of(
                 rule("GROCERIES", rateA),
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
+        ));
 
-        List<RewardRule> rulesB = List.of(
+        List<RewardRule> rulesB = withAdditionalCategoryRules(List.of(
                 rule("GROCERIES", rateB),
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
+        ));
 
         when(creditCardRepository.findById(1L))
                 .thenReturn(Optional.of(cardA));
@@ -286,20 +321,20 @@ class BreakEvenServiceTest {
                 .thenReturn(new BigDecimal("1.00"));
 
         RewardRule flatGroceries = rule("GROCERIES", "2.00");
-        List<RewardRule> cappedRules = List.of(
+        List<RewardRule> cappedRules = withAdditionalCategoryRules(List.of(
                 cappedGroceries,
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
-        List<RewardRule> flatRules = List.of(
+        ));
+        List<RewardRule> flatRules = withAdditionalCategoryRules(List.of(
                 flatGroceries,
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
+        ));
 
         when(creditCardRepository.findById(1L))
                 .thenReturn(Optional.of(cappedCard));
@@ -315,7 +350,10 @@ class BreakEvenServiceTest {
                 "GAS", BigDecimal.ZERO,
                 "DINING", BigDecimal.ZERO,
                 "TRAVEL", BigDecimal.ZERO,
-                "OTHER", BigDecimal.ZERO
+                "OTHER", BigDecimal.ZERO,
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
 
         Map<String, Object> result =
@@ -359,20 +397,20 @@ class BreakEvenServiceTest {
                 .thenReturn(new BigDecimal("1.00"));
 
         RewardRule flatGroceries = rule("GROCERIES", "2.00");
-        List<RewardRule> cappedRules = List.of(
+        List<RewardRule> cappedRules = withAdditionalCategoryRules(List.of(
                 cappedGroceries,
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
-        List<RewardRule> flatRules = List.of(
+        ));
+        List<RewardRule> flatRules = withAdditionalCategoryRules(List.of(
                 flatGroceries,
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
+        ));
 
         when(creditCardRepository.findById(1L))
                 .thenReturn(Optional.of(cappedCard));
@@ -388,7 +426,10 @@ class BreakEvenServiceTest {
                 "GAS", BigDecimal.ZERO,
                 "DINING", BigDecimal.ZERO,
                 "TRAVEL", BigDecimal.ZERO,
-                "OTHER", BigDecimal.ZERO
+                "OTHER", BigDecimal.ZERO,
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
 
         Map<String, Object> result =
@@ -452,21 +493,21 @@ class BreakEvenServiceTest {
 
         RewardRule flatGroceries = rule("GROCERIES", "2.00");
 
-        List<RewardRule> cappedRules = List.of(
+        List<RewardRule> cappedRules = withAdditionalCategoryRules(List.of(
                 cappedGroceries,
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
+        ));
 
-        List<RewardRule> flatRules = List.of(
+        List<RewardRule> flatRules = withAdditionalCategoryRules(List.of(
                 flatGroceries,
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
+        ));
 
         when(creditCardRepository.findById(1L))
                 .thenReturn(Optional.of(cappedCard));
@@ -483,7 +524,10 @@ class BreakEvenServiceTest {
                 "GAS", BigDecimal.ZERO,
                 "DINING", BigDecimal.ZERO,
                 "TRAVEL", BigDecimal.ZERO,
-                "OTHER", BigDecimal.ZERO
+                "OTHER", BigDecimal.ZERO,
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
 
         Map<String, Object> result =
@@ -544,21 +588,21 @@ class BreakEvenServiceTest {
         lenient().when(groceryB.getBaseRewardRate())
                 .thenReturn(new BigDecimal("2"));
 
-        List<RewardRule> rulesA = List.of(
+        List<RewardRule> rulesA = withAdditionalCategoryRules(List.of(
                 groceryA,
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
+        ));
 
-        List<RewardRule> rulesB = List.of(
+        List<RewardRule> rulesB = withAdditionalCategoryRules(List.of(
                 groceryB,
                 rule("GAS", "0"),
                 rule("DINING", "0"),
                 rule("TRAVEL", "0"),
                 rule("OTHER", "0")
-        );
+        ));
 
         when(creditCardRepository.findById(1L))
                 .thenReturn(Optional.of(cardA));

@@ -30,6 +30,9 @@ public class SimulationController {
             @RequestParam(defaultValue = "0") BigDecimal dining,
             @RequestParam(defaultValue = "0") BigDecimal travel,
             @RequestParam(defaultValue = "0") BigDecimal other,
+            @RequestParam(defaultValue = "0") BigDecimal transit,
+            @RequestParam(defaultValue = "0") BigDecimal rideshare,
+            @RequestParam(defaultValue = "0") BigDecimal evCharging,
             @RequestParam(defaultValue = "1000")
             BigDecimal maxGroceries,
             @RequestParam(defaultValue = "2") Long cardAId,
@@ -41,6 +44,9 @@ public class SimulationController {
         monthlySpending.put("DINING", dining);
         monthlySpending.put("TRAVEL", travel);
         monthlySpending.put("OTHER", other);
+        monthlySpending.put("TRANSIT", transit);
+        monthlySpending.put("RIDESHARE", rideshare);
+        monthlySpending.put("EV_CHARGING", evCharging);
 
         return simulationService.simulateGroceries(
                 monthlySpending,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { Spending } from "../types/Spending";
 
 import {
   CartesianGrid,
@@ -12,14 +13,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-type Spending = {
-  groceries: number;
-  gas: number;
-  dining: number;
-  travel: number;
-  other: number;
-};
 
 type CreditCardOption = {
   id: number;
@@ -94,6 +87,9 @@ export default function CashbackComparisonChart({
     spending.dining,
     spending.travel,
     spending.other,
+    spending.transit,
+    spending.rideshare,
+    spending.evCharging,
     sliderMax,
   ].join("|");
 
@@ -118,6 +114,9 @@ export default function CashbackComparisonChart({
       dining: String(spending.dining),
       travel: String(spending.travel),
       other: String(spending.other),
+      transit: String(spending.transit),
+      rideshare: String(spending.rideshare),
+      evCharging: String(spending.evCharging),
       maxGroceries: String(sliderMax),
     });
 
@@ -171,6 +170,9 @@ export default function CashbackComparisonChart({
     spending.dining,
     spending.travel,
     spending.other,
+    spending.transit,
+    spending.rideshare,
+    spending.evCharging,
     sliderMax,
     requestKey,
   ]);

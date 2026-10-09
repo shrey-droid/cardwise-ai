@@ -40,7 +40,10 @@ class SimulationServiceTest {
                 "GAS", new BigDecimal("200"),
                 "DINING", new BigDecimal("300"),
                 "TRAVEL", new BigDecimal("100"),
-                "OTHER", new BigDecimal("400")
+                "OTHER", new BigDecimal("400"),
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
     }
 

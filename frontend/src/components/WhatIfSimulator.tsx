@@ -1,18 +1,11 @@
 
 import { lazy, Suspense, useEffect, useState } from "react";
 import "./WhatIfSimulator.css";
+import type { Spending } from "../types/Spending";
 
 const CashbackComparisonChart = lazy(
   () => import("./CashbackComparisonChart")
 );
-
-type Spending = {
-  groceries: number;
-  gas: number;
-  dining: number;
-  travel: number;
-  other: number;
-};
 
 type Recommendation = {
   cardId: number;
@@ -86,6 +79,9 @@ export default function WhatIfSimulator({
         dining: String(spending.dining),
         travel: String(spending.travel),
         other: String(spending.other),
+        transit: String(spending.transit),
+        rideshare: String(spending.rideshare),
+        evCharging: String(spending.evCharging),
       });
 
       try {
@@ -128,6 +124,9 @@ export default function WhatIfSimulator({
     spending.dining,
     spending.travel,
     spending.other,
+    spending.transit,
+    spending.rideshare,
+    spending.evCharging,
   ]);
 
   useEffect(() => {

@@ -75,4 +75,20 @@ class SimulationIntegrationTest {
                 .andExpect(jsonPath("$.points[0].rewards['3']")
                         .doesNotExist());
     }
+
+    @Test
+    void shouldAcceptLegacyBreakEvenRequestWithFiveSpendingCategories()
+            throws Exception {
+        mockMvc.perform(get("/api/v1/break-even")
+                        .param("cardAId", "2")
+                        .param("cardBId", "1")
+                        .param("groceries", "100")
+                        .param("gas", "200")
+                        .param("dining", "300")
+                        .param("travel", "100")
+                        .param("other", "400"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.breakEvenMonthlyGroceries")
+                        .value(166.67));
+    }
 }

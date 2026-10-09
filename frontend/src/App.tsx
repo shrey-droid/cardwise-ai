@@ -1,15 +1,11 @@
 
 import { useState } from "react";
 import WhatIfSimulator from "./components/WhatIfSimulator";
+import {
+  BACKEND_SPENDING_CATEGORIES,
+  type Spending,
+} from "./types/Spending";
 import "./App.css";
-
-type Spending = {
-  groceries: number;
-  gas: number;
-  dining: number;
-  travel: number;
-  other: number;
-};
 
 type Recommendation = {
   cardId: number;
@@ -30,13 +26,7 @@ type BreakEvenResult = {
   recommendation: string;
 };
 
-const categories = [
-  "GROCERIES",
-  "GAS",
-  "DINING",
-  "TRAVEL",
-  "OTHER",
-];
+const categories = BACKEND_SPENDING_CATEGORIES;
 
 function generateExplanation(
   card: Recommendation,
@@ -133,6 +123,9 @@ export default function App() {
     dining: 300,
     travel: 100,
     other: 400,
+    transit: 0,
+    rideshare: 0,
+    evCharging: 0,
   });
 
   const [recommendations, setRecommendations] =
@@ -208,6 +201,9 @@ export default function App() {
           dining: String(spending.dining),
           travel: String(spending.travel),
           other: String(spending.other),
+          transit: String(spending.transit),
+          rideshare: String(spending.rideshare),
+          evCharging: String(spending.evCharging),
         });
 
         try {
@@ -249,7 +245,9 @@ export default function App() {
       {Object.entries(spending).map(([category, amount]) => (
         <div className="spending-field" key={category}>
           <label htmlFor={category}>
-            {category.charAt(0).toUpperCase() + category.slice(1)}
+            {category === "evCharging"
+              ? "EV Charging"
+              : category.charAt(0).toUpperCase() + category.slice(1)}
           </label>
 
           <input
@@ -410,8 +408,10 @@ export default function App() {
                       >
                         <div className="breakdown-label">
                           <span>
-                            {category.charAt(0) +
-                              category.slice(1).toLowerCase()}
+                            {category === "EV_CHARGING"
+                              ? "EV Charging"
+                              : category.charAt(0) +
+                                category.slice(1).toLowerCase()}
                           </span>
                           <strong>
                             {formatMoney(reward)}

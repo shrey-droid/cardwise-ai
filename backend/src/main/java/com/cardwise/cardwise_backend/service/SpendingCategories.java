@@ -11,7 +11,10 @@ public final class SpendingCategories {
             "GAS",
             "DINING",
             "TRAVEL",
-            "OTHER"
+            "OTHER",
+            "TRANSIT",
+            "RIDESHARE",
+            "EV_CHARGING"
     );
 
     public static final List<String> FIXED = ALL.stream()

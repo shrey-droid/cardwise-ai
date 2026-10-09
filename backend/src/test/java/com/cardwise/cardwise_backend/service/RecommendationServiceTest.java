@@ -48,7 +48,10 @@ class RecommendationServiceTest {
                 "GAS", new BigDecimal("200"),
                 "DINING", new BigDecimal("300"),
                 "TRAVEL", new BigDecimal("100"),
-                "OTHER", new BigDecimal("400")
+                "OTHER", new BigDecimal("400"),
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
     }
 
@@ -81,23 +84,55 @@ class RecommendationServiceTest {
     }
 
     private List<RewardRule> everydayRules() {
-        return List.of(
+        return withAdditionalCategoryRules(List.of(
                 rule("GROCERIES", "1"),
                 rule("GAS", "1"),
                 rule("DINING", "1"),
                 rule("TRAVEL", "1"),
                 rule("OTHER", "1")
-        );
+        ));
     }
 
     private List<RewardRule> groceryPlusRules() {
-        return List.of(
+        return withAdditionalCategoryRules(List.of(
                 rule("GROCERIES", "4"),
                 rule("GAS", "2"),
                 rule("DINING", "2"),
                 rule("TRAVEL", "1"),
                 rule("OTHER", "1")
-        );
+        ));
+    }
+
+    private List<RewardRule> withAdditionalCategoryRules(
+            List<RewardRule> existingRules
+    ) {
+        RewardRule otherRule = existingRules.stream()
+                .filter(rule -> "OTHER".equals(rule.getSpendingCategory()))
+                .findFirst()
+                .orElseThrow();
+        BigDecimal otherRate = otherRule.getRewardRate();
+        BigDecimal spendingCap = otherRule.getSpendingCap();
+        String capPeriod = otherRule.getCapPeriod();
+        BigDecimal baseRewardRate = otherRule.getBaseRewardRate();
+        String conditions = otherRule.getConditions();
+
+        return java.util.stream.Stream.concat(
+                existingRules.stream(),
+                List.of("TRANSIT", "RIDESHARE", "EV_CHARGING").stream()
+                        .map(category -> {
+                            RewardRule copiedRule =
+                                    rule(category, otherRate.toString());
+                            lenient().when(copiedRule.getSpendingCap())
+                                    .thenReturn(spendingCap);
+                            lenient().when(copiedRule.getCapPeriod())
+                                    .thenReturn(capPeriod);
+                            lenient().when(copiedRule.getBaseRewardRate())
+                                    .thenReturn(baseRewardRate);
+                            lenient().when(copiedRule.getConditions())
+                                    .thenReturn(conditions);
+                            return copiedRule;
+                        })
+        ).toList();
     }
 
     private void mockCashbackCards() {
@@ -220,7 +255,10 @@ class RecommendationServiceTest {
                 "GAS", BigDecimal.ZERO,
                 "DINING", BigDecimal.ZERO,
                 "TRAVEL", BigDecimal.ZERO,
-                "OTHER", BigDecimal.ZERO
+                "OTHER", BigDecimal.ZERO,
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
 
         IllegalArgumentException exception =
@@ -268,20 +306,23 @@ class RecommendationServiceTest {
         lenient().when(groceryRule.getBaseRewardRate())
                 .thenReturn(new BigDecimal("1.00"));
 
-        List<RewardRule> cappedRules = List.of(
+        List<RewardRule> cappedRules = withAdditionalCategoryRules(List.of(
                 groceryRule,
                 rule("GAS", "1"),
                 rule("DINING", "1"),
                 rule("TRAVEL", "1"),
                 rule("OTHER", "1")
-        );
+        ));
 
         Map<String, BigDecimal> cappedSpending = Map.of(
                 "GROCERIES", new BigDecimal("800"),
                 "GAS", BigDecimal.ZERO,
                 "DINING", BigDecimal.ZERO,
                 "TRAVEL", BigDecimal.ZERO,
-                "OTHER", BigDecimal.ZERO
+                "OTHER", BigDecimal.ZERO,
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
 
         when(creditCardRepository.findAll())
@@ -314,13 +355,13 @@ class RecommendationServiceTest {
         CreditCard cashbackCard =
                 card(10L, "Precision Cashback", "CASHBACK", "0");
 
-        List<RewardRule> rules = List.of(
+        List<RewardRule> rules = withAdditionalCategoryRules(List.of(
                 rule("GROCERIES", "1"),
                 rule("GAS", "1"),
                 rule("DINING", "1"),
                 rule("TRAVEL", "1"),
                 rule("OTHER", "1")
-        );
+        ));
 
         when(creditCardRepository.findAll())
                 .thenReturn(List.of(cashbackCard));
@@ -333,7 +374,10 @@ class RecommendationServiceTest {
                 "GAS", new BigDecimal("0.0416666667"),
                 "DINING", new BigDecimal("0.0416666667"),
                 "TRAVEL", BigDecimal.ZERO,
-                "OTHER", BigDecimal.ZERO
+                "OTHER", BigDecimal.ZERO,
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", BigDecimal.ZERO
         );
 
         List<Map<String, Object>> results =
@@ -371,6 +415,47 @@ class RecommendationServiceTest {
                         .compareTo(
                                 (BigDecimal) result.get("annualReward")
                         )
+        );
+    }
+
+    @Test
+    void shouldCalculateRewardsForEvChargingCategory() {
+        CreditCard cashbackCard =
+                card(12L, "EV Cashback", "CASHBACK", "0");
+        when(creditCardRepository.findAll()).thenReturn(List.of(cashbackCard));
+        List<RewardRule> evRules = everydayRules();
+        when(rewardRuleRepository.findByCreditCardId(12L))
+                .thenReturn(evRules);
+
+        Map<String, BigDecimal> evSpending = Map.of(
+                "GROCERIES", BigDecimal.ZERO,
+                "GAS", BigDecimal.ZERO,
+                "DINING", BigDecimal.ZERO,
+                "TRAVEL", BigDecimal.ZERO,
+                "OTHER", BigDecimal.ZERO,
+                "TRANSIT", BigDecimal.ZERO,
+                "RIDESHARE", BigDecimal.ZERO,
+                "EV_CHARGING", new BigDecimal("100")
+        );
+
+        Map<String, Object> result =
+                recommendationService.recommend(evSpending).get(0);
+
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> breakdown =
+                (Map<String, BigDecimal>) result.get("rewardBreakdown");
+
+        assertEquals(
+                0,
+                new BigDecimal("12.00").compareTo(
+                        breakdown.get("EV_CHARGING")
+                )
+        );
+        assertEquals(
+                0,
+                new BigDecimal("12.00").compareTo(
+                        (BigDecimal) result.get("annualReward")
+                )
         );
     }
 
