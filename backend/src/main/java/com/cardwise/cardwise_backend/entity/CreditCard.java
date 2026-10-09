@@ -2,6 +2,7 @@ package com.cardwise.cardwise_backend.entity;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -24,6 +25,18 @@ public class CreditCard {
     @Column(name = "annual_fee", nullable = false)
     private BigDecimal annualFee;
 
+    @Column(name = "minimum_personal_income", precision = 12, scale = 2)
+    private BigDecimal minimumPersonalIncome;
+
+    @Column(name = "minimum_household_income", precision = 12, scale = 2)
+    private BigDecimal minimumHouseholdIncome;
+
+    @Column(name = "official_url")
+    private String officialUrl;
+
+    @Column(name = "last_verified_at")
+    private LocalDate lastVerifiedAt;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -42,6 +55,30 @@ public class CreditCard {
 
     public BigDecimal getAnnualFee() { return annualFee; }
     public void setAnnualFee(BigDecimal annualFee) { this.annualFee = annualFee; }
+
+    public BigDecimal getMinimumPersonalIncome() {
+        return minimumPersonalIncome;
+    }
+    public void setMinimumPersonalIncome(BigDecimal minimumPersonalIncome) {
+        this.minimumPersonalIncome = minimumPersonalIncome;
+    }
+
+    public BigDecimal getMinimumHouseholdIncome() {
+        return minimumHouseholdIncome;
+    }
+    public void setMinimumHouseholdIncome(BigDecimal minimumHouseholdIncome) {
+        this.minimumHouseholdIncome = minimumHouseholdIncome;
+    }
+
+    public String getOfficialUrl() { return officialUrl; }
+    public void setOfficialUrl(String officialUrl) {
+        this.officialUrl = officialUrl;
+    }
+
+    public LocalDate getLastVerifiedAt() { return lastVerifiedAt; }
+    public void setLastVerifiedAt(LocalDate lastVerifiedAt) {
+        this.lastVerifiedAt = lastVerifiedAt;
+    }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

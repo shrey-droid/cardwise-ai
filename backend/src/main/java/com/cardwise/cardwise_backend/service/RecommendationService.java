@@ -69,17 +69,13 @@ public class RecommendationService {
         List<RewardRule> rules =
                 rewardRuleRepository.findByCreditCardId(card.getId());
 
-        Map<String, BigDecimal> rates = new HashMap<>();
-
+        Map<String, RewardRule> rulesByCategory = new HashMap<>();
         for (RewardRule rule : rules) {
-            rates.put(
-                    rule.getSpendingCategory(),
-                    rule.getRewardRate()
-            );
+            rulesByCategory.put(rule.getSpendingCategory(), rule);
         }
 
         // Exclude cards with incomplete reward rules
-        if (!rates.keySet().containsAll(CATEGORIES)) {
+        if (!rulesByCategory.keySet().containsAll(CATEGORIES)) {
             return null;
         }
 
@@ -89,16 +85,61 @@ public class RecommendationService {
         for (String category : CATEGORIES) {
 
             BigDecimal monthlyAmount = monthlySpending.get(category);
-            BigDecimal cashbackRate = rates.get(category);
+            RewardRule rule = rulesByCategory.get(category);
 
-            BigDecimal categoryReward = monthlyAmount
-                    .multiply(BigDecimal.valueOf(12))
-                    .multiply(cashbackRate)
-                    .divide(
-                            BigDecimal.valueOf(100),
-                            2,
-                            RoundingMode.HALF_UP
+            BigDecimal annualSpending =
+                    monthlyAmount.multiply(BigDecimal.valueOf(12));
+
+            BigDecimal categoryReward;
+
+            if (rule.getSpendingCap() == null) {
+                // Existing behavior for uncapped cards.
+                categoryReward = annualSpending
+                        .multiply(rule.getRewardRate())
+                        .divide(
+                                BigDecimal.valueOf(100),
+                                2,
+                                RoundingMode.HALF_UP
+                        );
+            } else {
+                BigDecimal annualCap;
+
+                if ("MONTHLY".equals(rule.getCapPeriod())) {
+                    annualCap = rule.getSpendingCap()
+                            .multiply(BigDecimal.valueOf(12));
+                } else if ("ANNUAL".equals(rule.getCapPeriod())) {
+                    annualCap = rule.getSpendingCap();
+                } else {
+                    throw new IllegalArgumentException(
+                            "Unsupported cap period: " +
+                                    rule.getCapPeriod()
                     );
+                }
+
+                if (rule.getBaseRewardRate() == null) {
+                    throw new IllegalArgumentException(
+                            "Fallback reward rate is required for capped rules"
+                    );
+                }
+
+                BigDecimal eligibleSpending =
+                        annualSpending.min(annualCap);
+                BigDecimal excessSpending =
+                        annualSpending.subtract(eligibleSpending);
+
+                BigDecimal cappedReward = eligibleSpending
+                        .multiply(rule.getRewardRate());
+                BigDecimal fallbackReward = excessSpending
+                        .multiply(rule.getBaseRewardRate());
+
+                categoryReward = cappedReward
+                        .add(fallbackReward)
+                        .divide(
+                                BigDecimal.valueOf(100),
+                                2,
+                                RoundingMode.HALF_UP
+                        );
+            }
 
             annualReward = annualReward.add(categoryReward);
             rewardBreakdown.put(category, categoryReward);

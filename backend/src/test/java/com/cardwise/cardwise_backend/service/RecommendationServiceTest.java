@@ -68,7 +68,7 @@ class RecommendationServiceTest {
         RewardRule rule = mock(RewardRule.class);
 
         when(rule.getSpendingCategory()).thenReturn(category);
-        when(rule.getRewardRate())
+        lenient().when(rule.getRewardRate())
                 .thenReturn(new BigDecimal(rate));
 
         return rule;
@@ -247,5 +247,59 @@ class RecommendationServiceTest {
         );
 
         verifyNoInteractions(creditCardRepository);
+    }
+
+    @Test
+    void shouldApplyMonthlyGrocerySpendingCapAndBaseRateAboveCap() {
+        CreditCard cappedCard =
+                card(4L, "Capped Grocery Cashback", "CASHBACK", "0");
+
+        RewardRule groceryRule = rule("GROCERIES", "4");
+        lenient().when(groceryRule.getSpendingCap())
+                .thenReturn(new BigDecimal("500"));
+        lenient().when(groceryRule.getCapPeriod())
+                .thenReturn("MONTHLY");
+        lenient().when(groceryRule.getBaseRewardRate())
+                .thenReturn(new BigDecimal("1.00"));
+
+        List<RewardRule> cappedRules = List.of(
+                groceryRule,
+                rule("GAS", "1"),
+                rule("DINING", "1"),
+                rule("TRAVEL", "1"),
+                rule("OTHER", "1")
+        );
+
+        Map<String, BigDecimal> cappedSpending = Map.of(
+                "GROCERIES", new BigDecimal("800"),
+                "GAS", BigDecimal.ZERO,
+                "DINING", BigDecimal.ZERO,
+                "TRAVEL", BigDecimal.ZERO,
+                "OTHER", BigDecimal.ZERO
+        );
+
+        when(creditCardRepository.findAll())
+                .thenReturn(List.of(cappedCard));
+        when(rewardRuleRepository.findByCreditCardId(4L))
+                .thenReturn(cappedRules);
+
+        List<Map<String, Object>> results =
+                recommendationService.recommend(cappedSpending);
+
+        assertEquals(1, results.size());
+
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> breakdown =
+                (Map<String, BigDecimal>) results.get(0)
+                        .get("rewardBreakdown");
+
+        // $500 at 4% plus $300 at the 1% base rate,
+        // annualized: ($20 + $3) * 12 = $276.
+        assertEquals(
+                0,
+                new BigDecimal("276.00").compareTo(
+                        breakdown.get("GROCERIES")
+                )
+        );
     }
 }
