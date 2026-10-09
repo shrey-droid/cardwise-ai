@@ -1,6 +1,8 @@
 package com.cardwise.cardwise_backend.controller;
 
+import com.cardwise.cardwise_backend.entity.CreditCard;
 import com.cardwise.cardwise_backend.repository.CreditCardRepository;
+import com.cardwise.cardwise_backend.service.CardCatalogueMode;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,9 @@ class CreditCardControllerTest {
     @MockitoBean
     private CreditCardRepository repository;
 
+    @MockitoBean
+    private CardCatalogueMode cardCatalogueMode;
+
     @Test
     void shouldReturnAllCardsWithoutFilter() throws Exception {
         when(repository.findAll()).thenReturn(List.of());
@@ -34,6 +39,23 @@ class CreditCardControllerTest {
                 .andExpect(jsonPath("$").isArray());
 
         verify(repository).findAll();
+    }
+
+    @Test
+    void shouldOnlyReturnCardsInTheActiveCatalogueMode() throws Exception {
+        CreditCard demoCard = new CreditCard();
+        demoCard.setDemo(true);
+        CreditCard realCard = new CreditCard();
+        realCard.setDemo(false);
+
+        when(repository.findAll()).thenReturn(List.of(demoCard, realCard));
+        when(cardCatalogueMode.includes(demoCard)).thenReturn(false);
+        when(cardCatalogueMode.includes(realCard)).thenReturn(true);
+
+        mockMvc.perform(get("/api/v1/cards"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].demo").value(false));
     }
 
     @Test

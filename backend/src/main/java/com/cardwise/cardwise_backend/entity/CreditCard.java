@@ -25,6 +25,9 @@ public class CreditCard {
     @Column(name = "annual_fee", nullable = false)
     private BigDecimal annualFee;
 
+    @Column(name = "is_demo", nullable = false)
+    private boolean demo;
+
     @Column(name = "minimum_personal_income", precision = 12, scale = 2)
     private BigDecimal minimumPersonalIncome;
 
@@ -55,6 +58,9 @@ public class CreditCard {
 
     public BigDecimal getAnnualFee() { return annualFee; }
     public void setAnnualFee(BigDecimal annualFee) { this.annualFee = annualFee; }
+
+    public boolean isDemo() { return demo; }
+    public void setDemo(boolean demo) { this.demo = demo; }
 
     public BigDecimal getMinimumPersonalIncome() {
         return minimumPersonalIncome;

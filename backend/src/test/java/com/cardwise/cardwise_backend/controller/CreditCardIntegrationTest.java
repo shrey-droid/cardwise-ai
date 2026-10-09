@@ -23,7 +23,10 @@ class CreditCardIntegrationTest {
     void shouldReturnAllSeededCards() throws Exception {
         mockMvc.perform(get("/api/v1/cards"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(3));
+                                .andExpect(jsonPath("$.length()").value(3))
+                                .andExpect(jsonPath("$[0].demo").value(true))
+                                .andExpect(jsonPath("$[1].demo").value(true))
+                                .andExpect(jsonPath("$[2].demo").value(true));
     }
 
     @Test

@@ -37,7 +37,8 @@ class RecommendationServiceTest {
         recommendationService = new RecommendationService(
                 creditCardRepository,
                 rewardRuleRepository,
-                rewardCalculationService
+                rewardCalculationService,
+                new CardCatalogueMode("DEMO")
         );
     }
 
@@ -61,9 +62,10 @@ class RecommendationServiceTest {
 
         lenient().when(card.getId()).thenReturn(id);
         lenient().when(card.getCardName()).thenReturn(name);
-        when(card.getRewardType()).thenReturn(rewardType);
+        lenient().when(card.getRewardType()).thenReturn(rewardType);
         lenient().when(card.getAnnualFee())
                 .thenReturn(new BigDecimal(annualFee));
+        lenient().when(card.isDemo()).thenReturn(true);
 
         return card;
     }
@@ -370,5 +372,36 @@ class RecommendationServiceTest {
                                 (BigDecimal) result.get("annualReward")
                         )
         );
+    }
+
+    @Test
+    void shouldOnlyRecommendRealCardsInRealCatalogueMode() {
+        CreditCard demoCard =
+                card(10L, "Demo Cashback", "CASHBACK", "0");
+        CreditCard realCard =
+                card(11L, "Verified Cashback", "CASHBACK", "0");
+        when(realCard.isDemo()).thenReturn(false);
+
+        when(creditCardRepository.findAll())
+                .thenReturn(List.of(demoCard, realCard));
+        List<RewardRule> realCardRules = everydayRules();
+        when(rewardRuleRepository.findByCreditCardId(11L))
+                .thenReturn(realCardRules);
+
+        RecommendationService realCatalogueService =
+                new RecommendationService(
+                        creditCardRepository,
+                        rewardRuleRepository,
+                        new RewardCalculationService(),
+                        new CardCatalogueMode("REAL")
+                );
+
+        List<Map<String, Object>> results =
+                realCatalogueService.recommend(spending());
+
+        assertEquals(1, results.size());
+        assertEquals(11L, results.get(0).get("cardId"));
+        verify(rewardRuleRepository).findByCreditCardId(11L);
+        verify(rewardRuleRepository, never()).findByCreditCardId(10L);
     }
 }

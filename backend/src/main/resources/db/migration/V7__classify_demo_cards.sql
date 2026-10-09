@@ -1,0 +1,2 @@
+ALTER TABLE credit_cards
+    ADD COLUMN is_demo BOOLEAN NOT NULL DEFAULT TRUE;

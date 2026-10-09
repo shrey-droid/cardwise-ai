@@ -27,15 +27,18 @@ public class RecommendationService {
     private final CreditCardRepository creditCardRepository;
     private final RewardRuleRepository rewardRuleRepository;
         private final RewardCalculationService rewardCalculationService;
+        private final CardCatalogueMode cardCatalogueMode;
 
     public RecommendationService(
             CreditCardRepository creditCardRepository,
                         RewardRuleRepository rewardRuleRepository,
-                        RewardCalculationService rewardCalculationService) {
+                        RewardCalculationService rewardCalculationService,
+                        CardCatalogueMode cardCatalogueMode) {
 
         this.creditCardRepository = creditCardRepository;
         this.rewardRuleRepository = rewardRuleRepository;
                 this.rewardCalculationService = rewardCalculationService;
+                this.cardCatalogueMode = cardCatalogueMode;
     }
 
     public List<Map<String, Object>> recommend(
@@ -54,6 +57,7 @@ public class RecommendationService {
 
         return creditCardRepository.findAll()
                 .stream()
+                .filter(cardCatalogueMode::includes)
                 .filter(card -> "CASHBACK".equals(card.getRewardType()))
                 .map(card -> calculateReward(card, monthlySpending))
                 .filter(result -> result != null)

@@ -38,7 +38,8 @@ class BreakEvenServiceTest {
         breakEvenService = new BreakEvenService(
                 creditCardRepository,
                 rewardRuleRepository,
-                rewardCalculationService
+                rewardCalculationService,
+                new CardCatalogueMode("DEMO")
         );
     }
 
@@ -62,6 +63,7 @@ class BreakEvenServiceTest {
         lenient().when(card.getCardName()).thenReturn(name);
         lenient().when(card.getAnnualFee())
                 .thenReturn(new BigDecimal(annualFee));
+        lenient().when(card.isDemo()).thenReturn(true);
 
         return card;
     }
@@ -647,6 +649,35 @@ class BreakEvenServiceTest {
                 creditCardRepository,
                 rewardRuleRepository
         );
+    }
+
+    @Test
+    void shouldRejectDemoCardsInRealCatalogueMode() {
+        CreditCard demoCardA = card(1L, "Demo A", "0");
+        CreditCard demoCardB = card(2L, "Demo B", "0");
+        when(creditCardRepository.findById(1L))
+                .thenReturn(Optional.of(demoCardA));
+        when(creditCardRepository.findById(2L))
+                .thenReturn(Optional.of(demoCardB));
+
+        breakEvenService = new BreakEvenService(
+                creditCardRepository,
+                rewardRuleRepository,
+                rewardCalculationService,
+                new CardCatalogueMode("REAL")
+        );
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> breakEvenService.calculateBreakEven(
+                        1L,
+                        2L,
+                        spending("600")
+                )
+        );
+
+        assertEquals("Card A not found.", exception.getMessage());
+        verifyNoInteractions(rewardRuleRepository);
     }
 
     @Test

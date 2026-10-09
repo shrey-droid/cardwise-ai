@@ -29,15 +29,18 @@ public class BreakEvenService {
     private final CreditCardRepository creditCardRepository;
     private final RewardRuleRepository rewardRuleRepository;
     private final RewardCalculationService rewardCalculationService;
+        private final CardCatalogueMode cardCatalogueMode;
 
     public BreakEvenService(
             CreditCardRepository creditCardRepository,
             RewardRuleRepository rewardRuleRepository,
-            RewardCalculationService rewardCalculationService
+                        RewardCalculationService rewardCalculationService,
+                        CardCatalogueMode cardCatalogueMode
     ) {
         this.creditCardRepository = creditCardRepository;
         this.rewardRuleRepository = rewardRuleRepository;
         this.rewardCalculationService = rewardCalculationService;
+                this.cardCatalogueMode = cardCatalogueMode;
     }
 
     public Map<String, Object> calculateBreakEven(
@@ -63,6 +66,13 @@ public class BreakEvenService {
                 .orElseThrow(() ->
                         new IllegalArgumentException("Card B not found.")
                 );
+
+        if (!cardCatalogueMode.includes(cardA)) {
+            throw new IllegalArgumentException("Card A not found.");
+        }
+        if (!cardCatalogueMode.includes(cardB)) {
+            throw new IllegalArgumentException("Card B not found.");
+        }
 
         Map<String, RewardRule> rulesA = getRules(cardAId);
         Map<String, RewardRule> rulesB = getRules(cardBId);
