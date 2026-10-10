@@ -3,8 +3,8 @@ services:
     name: cardwise-api
     runtime: docker
     rootDir: backend
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
     autoDeployTrigger: "off"
     healthCheckPath: /actuator/health
