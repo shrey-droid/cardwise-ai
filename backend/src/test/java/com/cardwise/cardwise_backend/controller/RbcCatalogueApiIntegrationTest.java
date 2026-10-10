@@ -7,6 +7,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -20,13 +23,13 @@ class RbcCatalogueApiIntegrationTest {
     private MockMvc mockMvc;
 
     @Test
-    void realCardListContainsRbcButNoDemoCards() throws Exception {
+    void realCardListContainsRbcAndTangerineButNoDemoCards() throws Exception {
         mockMvc.perform(get("/api/v1/cards"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].cardName")
-                        .value("RBC Cash Back Mastercard"))
-                .andExpect(jsonPath("$[0].demo").value(false));
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[?(@.cardName=='RBC Cash Back Mastercard')].demo")
+                        .value(contains(false)))
+                .andExpect(jsonPath("$[*].demo", not(hasItem(true))));
     }
 
     @Test
@@ -39,7 +42,7 @@ class RbcCatalogueApiIntegrationTest {
                         .param("travel", "100")
                         .param("other", "400"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].cardName")
                         .value("RBC Cash Back Mastercard"))
                 .andExpect(jsonPath("$[0].annualFee").value(0.0))

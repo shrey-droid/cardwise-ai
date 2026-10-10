@@ -56,6 +56,13 @@ class SelectionComparisonApiTest {
         creditCardRepository.saveAndFlush(tangerine);
     }
 
+    // V12 activates Tangerine, so withheld behaviour needs its own fixture.
+    private void withholdTangerineForThisTest() {
+        CreditCard tangerine = card(TANGERINE);
+        tangerine.setCatalogueWithheld(true);
+        creditCardRepository.saveAndFlush(tangerine);
+    }
+
     private ResultActions breakEven(String extra) throws Exception {
         return mockMvc.perform(get("/api/v1/break-even?" + SPENDING
                 + "&cardAId=" + rbcId() + "&cardBId=" + tangerineId()
@@ -161,6 +168,8 @@ class SelectionComparisonApiTest {
     @Test
     void withheldTangerineIsInaccessibleAndIndistinguishableFromUnknown()
             throws Exception {
+        withholdTangerineForThisTest();
+
         String withheldBreakEven = breakEven(selection("GAS,DINING"))
                 .andExpect(status().isBadRequest())
                 .andReturn().getResponse().getContentAsString();

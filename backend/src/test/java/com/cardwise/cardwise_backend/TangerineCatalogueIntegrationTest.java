@@ -107,8 +107,8 @@ class TangerineCatalogueIntegrationTest {
     }
 
     @Test
-    void tangerineIsWithheldFromTheCatalogueUntilSelectionAwareCalculation() {
-        assertTrue(card("Tangerine Money-Back Credit Card")
+    void tangerineIsActiveInTheCatalogueAfterV12() {
+        assertFalse(card("Tangerine Money-Back Credit Card")
                 .isCatalogueWithheld());
         assertFalse(card("RBC Cash Back Mastercard").isCatalogueWithheld());
     }

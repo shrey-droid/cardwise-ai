@@ -56,6 +56,13 @@ class CardSelectionPolicyApiTest {
         creditCardRepository.saveAndFlush(tangerine);
     }
 
+    // V12 activates Tangerine, so withheld behaviour needs its own fixture.
+    private void withholdTangerineForThisTest() {
+        CreditCard tangerine = card(TANGERINE);
+        tangerine.setCatalogueWithheld(true);
+        creditCardRepository.saveAndFlush(tangerine);
+    }
+
     private String cardsBody(String query) throws Exception {
         return mockMvc.perform(get("/api/v1/cards" + query))
                 .andExpect(status().isOk())
@@ -74,6 +81,8 @@ class CardSelectionPolicyApiTest {
 
     @Test
     void rbcResponseKeepsItsOriginalFieldsAndHasNoPolicy() throws Exception {
+        withholdTangerineForThisTest();
+
         mockMvc.perform(get("/api/v1/cards"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
@@ -165,6 +174,8 @@ class CardSelectionPolicyApiTest {
     @Test
     void withheldTangerineAndItsPolicyAreAbsentFromEveryCardsResponse()
             throws Exception {
+        withholdTangerineForThisTest();
+
         for (String query : new String[] {"", "?rewardType=CASHBACK",
                 "?rewardType=cashback", "?rewardType=POINTS"}) {
             String body = cardsBody(query);

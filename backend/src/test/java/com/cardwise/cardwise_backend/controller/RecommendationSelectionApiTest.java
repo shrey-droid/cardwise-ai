@@ -55,6 +55,13 @@ class RecommendationSelectionApiTest {
         creditCardRepository.saveAndFlush(tangerine);
     }
 
+    // V12 activates Tangerine, so withheld behaviour needs its own fixture.
+    private void withholdTangerineForThisTest() {
+        CreditCard tangerine = card(TANGERINE);
+        tangerine.setCatalogueWithheld(true);
+        creditCardRepository.saveAndFlush(tangerine);
+    }
+
     private ResultActions recommend(String extraQuery) throws Exception {
         return mockMvc.perform(get("/api/v1/recommendations?groceries=600"
                 + "&gas=200&dining=300&travel=100&other=400" + extraQuery));
@@ -67,6 +74,8 @@ class RecommendationSelectionApiTest {
 
     @Test
     void requestWithoutSelectionParametersIsUnchanged() throws Exception {
+        withholdTangerineForThisTest();
+
         recommend("")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
@@ -208,6 +217,8 @@ class RecommendationSelectionApiTest {
     @Test
     void selectionsForAWithheldCardDoNotExposeOrChangeAnything()
             throws Exception {
+        withholdTangerineForThisTest();
+
         String baseline = body("");
         long id = tangerineId();
 

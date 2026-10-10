@@ -61,6 +61,13 @@ class CatalogueEligibilityApiTest {
         creditCardRepository.saveAndFlush(tangerine);
     }
 
+    // V12 activates Tangerine, so withheld behaviour needs its own fixture.
+    private void withhold() {
+        CreditCard tangerine = card(TANGERINE);
+        tangerine.setCatalogueWithheld(true);
+        creditCardRepository.saveAndFlush(tangerine);
+    }
+
     private void breakRequirementCode() {
         CardSelectionPolicy policy =
                 policyRepository.findById(card(TANGERINE).getId())
@@ -153,6 +160,7 @@ class CatalogueEligibilityApiTest {
     @Test
     void withheldCardStaysHiddenEverywhereRegardlessOfConfiguration()
             throws Exception {
+        withhold();
         assertHiddenEverywhere();
 
         breakRequirementCode();
