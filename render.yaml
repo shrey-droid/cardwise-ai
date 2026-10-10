@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: cardwise-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    autoDeployTrigger: "off"
+    healthCheckPath: /actuator/health
+
+    envVars:
+      - key: SPRING_FLYWAY_TARGET
+        value: "11"
+
+      - key: JPA_SHOW_SQL
+        value: "false"
+
+      - key: CARDWISE_CATALOGUE_MODE
+        value: REAL
+
+      - key: JAVA_TOOL_OPTIONS
+        value: "-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
+
+      - key: DB_URL
+        sync: false
+
+      - key: DB_USERNAME
+        sync: false
+
+      - key: DB_PASSWORD
+        sync: false
