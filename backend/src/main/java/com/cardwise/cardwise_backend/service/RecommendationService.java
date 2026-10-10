@@ -1,7 +1,9 @@
 package com.cardwise.cardwise_backend.service;
 
+import com.cardwise.cardwise_backend.entity.CardSelectionPolicy;
 import com.cardwise.cardwise_backend.entity.CreditCard;
 import com.cardwise.cardwise_backend.entity.RewardRule;
+import com.cardwise.cardwise_backend.repository.CardSelectionPolicyRepository;
 import com.cardwise.cardwise_backend.repository.CreditCardRepository;
 import com.cardwise.cardwise_backend.repository.RewardRuleRepository;
 
@@ -10,8 +12,10 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 @Service
 public class RecommendationService {
@@ -19,22 +23,37 @@ public class RecommendationService {
     private final CreditCardRepository creditCardRepository;
     private final RewardRuleRepository rewardRuleRepository;
         private final RewardCalculationService rewardCalculationService;
-        private final CardCatalogueMode cardCatalogueMode;
+        private final CardCatalogueEligibility cardCatalogueEligibility;
+    private final CardSelectionPolicyRepository cardSelectionPolicyRepository;
+    private final RewardRuleResolver rewardRuleResolver;
 
     public RecommendationService(
             CreditCardRepository creditCardRepository,
                         RewardRuleRepository rewardRuleRepository,
                         RewardCalculationService rewardCalculationService,
-                        CardCatalogueMode cardCatalogueMode) {
+                        CardCatalogueEligibility cardCatalogueEligibility,
+                        CardSelectionPolicyRepository cardSelectionPolicyRepository,
+                        RewardRuleResolver rewardRuleResolver) {
 
         this.creditCardRepository = creditCardRepository;
         this.rewardRuleRepository = rewardRuleRepository;
                 this.rewardCalculationService = rewardCalculationService;
-                this.cardCatalogueMode = cardCatalogueMode;
+                this.cardCatalogueEligibility = cardCatalogueEligibility;
+        this.cardSelectionPolicyRepository = cardSelectionPolicyRepository;
+        this.rewardRuleResolver = rewardRuleResolver;
     }
 
     public List<Map<String, Object>> recommend(
             Map<String, BigDecimal> monthlySpending) {
+        return recommend(monthlySpending, Map.of());
+    }
+
+    public List<Map<String, Object>> recommend(
+            Map<String, BigDecimal> monthlySpending,
+            Map<Long, RewardSelection> selectionsByCardId) {
+
+        Map<Long, RewardSelection> selections =
+                selectionsByCardId == null ? Map.of() : selectionsByCardId;
 
         // Validate spending amounts
         for (String category : SpendingCategories.ALL) {
@@ -47,11 +66,16 @@ public class RecommendationService {
             }
         }
 
+        // Selections are looked up only for cards that pass the catalogue filter.
         return creditCardRepository.findAll()
                 .stream()
-                .filter(cardCatalogueMode::includes)
+                .filter(cardCatalogueEligibility::isEligible)
                 .filter(card -> "CASHBACK".equals(card.getRewardType()))
-                .map(card -> calculateReward(card, monthlySpending))
+                .map(card -> calculateReward(
+                        card,
+                        monthlySpending,
+                        selections.getOrDefault(
+                                card.getId(), RewardSelection.NONE)))
                 .filter(result -> result != null)
                 .sorted(Comparator.comparing(
                         result -> (BigDecimal) result.get("netAnnualReward"),
@@ -60,17 +84,20 @@ public class RecommendationService {
                 .toList();
     }
 
-    private Map<String, Object> calculateReward(
+    Map<String, Object> calculateReward(
             CreditCard card,
-            Map<String, BigDecimal> monthlySpending) {
+            Map<String, BigDecimal> monthlySpending,
+            RewardSelection selection) {
 
         List<RewardRule> rules =
                 rewardRuleRepository.findByCreditCardId(card.getId());
 
-        Map<String, RewardRule> rulesByCategory = new HashMap<>();
-        for (RewardRule rule : rules) {
-            rulesByCategory.put(rule.getSpendingCategory(), rule);
-        }
+        CardSelectionPolicy policy = cardSelectionPolicyRepository
+                .findById(card.getId())
+                .orElse(null);
+
+        Map<String, EffectiveRewardRule> rulesByCategory =
+                rewardRuleResolver.resolve(rules, policy, selection);
 
         // Exclude cards with incomplete reward rules
         if (!rulesByCategory.keySet()
@@ -84,7 +111,7 @@ public class RecommendationService {
         for (String category : SpendingCategories.ALL) {
 
             BigDecimal monthlyAmount = monthlySpending.get(category);
-            RewardRule rule = rulesByCategory.get(category);
+            EffectiveRewardRule rule = rulesByCategory.get(category);
 
             BigDecimal categoryReward;
             categoryReward = rewardCalculationService.calculateAnnualReward(
@@ -99,13 +126,30 @@ public class RecommendationService {
         BigDecimal netAnnualReward =
                 annualReward.subtract(card.getAnnualFee());
 
-        return Map.of(
-        "cardId", card.getId(),
-        "cardName", card.getCardName(),
-        "annualFee", card.getAnnualFee(),
-        "annualReward", annualReward,
-        "netAnnualReward", netAnnualReward,
-        "rewardBreakdown", rewardBreakdown
-);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("cardId", card.getId());
+        result.put("cardName", card.getCardName());
+        result.put("annualFee", card.getAnnualFee());
+        result.put("annualReward", annualReward);
+        result.put("netAnnualReward", netAnnualReward);
+        result.put("rewardBreakdown", rewardBreakdown);
+
+        // Describes the selection supplied, not the cardholder's account settings.
+        if (policy != null) {
+            int selectedCount = selection.categories().size();
+            boolean complete =
+                    selectedCount >= policy.getBaseSelectionLimit();
+            String mode = selectedCount == 0
+                    ? "NONE_SELECTED"
+                    : complete ? "SELECTED" : "PARTIAL_SELECTION";
+
+            result.put("selectionMode", mode);
+            result.put("selectionRequired", !complete);
+            result.put(
+                    "selectedCategories",
+                    List.copyOf(new TreeSet<>(selection.categories())));
+        }
+
+        return result;
     }
 }

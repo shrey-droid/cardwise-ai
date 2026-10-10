@@ -28,7 +28,13 @@ public class RecommendationController {
             @RequestParam BigDecimal other,
             @RequestParam(defaultValue = "0") BigDecimal transit,
             @RequestParam(defaultValue = "0") BigDecimal rideshare,
-            @RequestParam(defaultValue = "0") BigDecimal evCharging
+            @RequestParam(defaultValue = "0") BigDecimal evCharging,
+            @RequestParam(required = false) String cardId,
+            @RequestParam(required = false) String selectedCategories,
+            // True means the user confirms the card's extended-selection
+            // requirement is met (e.g. cash back deposited to savings).
+            @RequestParam(required = false)
+            String extendedRequirementConfirmed
         ) {
 
         Map<String, BigDecimal> monthlySpending = Map.of(
@@ -42,7 +48,14 @@ public class RecommendationController {
             "EV_CHARGING", evCharging
         );
 
-        return recommendationService.recommend(monthlySpending);
+        return recommendationService.recommend(
+                monthlySpending,
+                RewardSelectionRequestParser.parse(
+                        cardId,
+                        selectedCategories,
+                        extendedRequirementConfirmed
+                )
+        );
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

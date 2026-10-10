@@ -1,11 +1,12 @@
 package com.cardwise.cardwise_backend.entity;
 
+import com.cardwise.cardwise_backend.service.RewardRuleTerms;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 
 @Entity
 @Table(name = "reward_rules")
-public class RewardRule {
+public class RewardRule implements RewardRuleTerms {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -31,6 +32,12 @@ public class RewardRule {
 
     @Column(name = "conditions", columnDefinition = "TEXT")
     private String conditions;
+
+    @Column(name = "is_selectable", nullable = false)
+    private boolean selectable;
+
+    @Column(name = "unselected_reward_rate", precision = 7, scale = 4)
+    private BigDecimal unselectedRewardRate;
 
     public RewardRule() {}
 
@@ -92,5 +99,21 @@ public class RewardRule {
 
     public void setConditions(String conditions) {
         this.conditions = conditions;
+    }
+
+    public boolean isSelectable() {
+        return selectable;
+    }
+
+    public void setSelectable(boolean selectable) {
+        this.selectable = selectable;
+    }
+
+    public BigDecimal getUnselectedRewardRate() {
+        return unselectedRewardRate;
+    }
+
+    public void setUnselectedRewardRate(BigDecimal unselectedRewardRate) {
+        this.unselectedRewardRate = unselectedRewardRate;
     }
 }

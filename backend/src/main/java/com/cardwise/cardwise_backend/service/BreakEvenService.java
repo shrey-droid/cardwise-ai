@@ -1,7 +1,9 @@
 package com.cardwise.cardwise_backend.service;
 
+import com.cardwise.cardwise_backend.entity.CardSelectionPolicy;
 import com.cardwise.cardwise_backend.entity.CreditCard;
 import com.cardwise.cardwise_backend.entity.RewardRule;
+import com.cardwise.cardwise_backend.repository.CardSelectionPolicyRepository;
 import com.cardwise.cardwise_backend.repository.CreditCardRepository;
 import com.cardwise.cardwise_backend.repository.RewardRuleRepository;
 import org.springframework.stereotype.Service;
@@ -14,7 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,18 +27,24 @@ public class BreakEvenService {
     private final CreditCardRepository creditCardRepository;
     private final RewardRuleRepository rewardRuleRepository;
     private final RewardCalculationService rewardCalculationService;
-        private final CardCatalogueMode cardCatalogueMode;
+        private final CardCatalogueEligibility cardCatalogueEligibility;
+    private final CardSelectionPolicyRepository cardSelectionPolicyRepository;
+    private final RewardRuleResolver rewardRuleResolver;
 
     public BreakEvenService(
             CreditCardRepository creditCardRepository,
             RewardRuleRepository rewardRuleRepository,
                         RewardCalculationService rewardCalculationService,
-                        CardCatalogueMode cardCatalogueMode
+                        CardCatalogueEligibility cardCatalogueEligibility,
+                        CardSelectionPolicyRepository cardSelectionPolicyRepository,
+                        RewardRuleResolver rewardRuleResolver
     ) {
         this.creditCardRepository = creditCardRepository;
         this.rewardRuleRepository = rewardRuleRepository;
         this.rewardCalculationService = rewardCalculationService;
-                this.cardCatalogueMode = cardCatalogueMode;
+                this.cardCatalogueEligibility = cardCatalogueEligibility;
+        this.cardSelectionPolicyRepository = cardSelectionPolicyRepository;
+        this.rewardRuleResolver = rewardRuleResolver;
     }
 
     public Map<String, Object> calculateBreakEven(
@@ -45,6 +52,19 @@ public class BreakEvenService {
             Long cardBId,
             Map<String, BigDecimal> monthlySpending
     ) {
+        return calculateBreakEven(
+                cardAId, cardBId, monthlySpending, Map.of());
+    }
+
+    // Selections stay fixed while grocery spending varies; nothing is optimized.
+    public Map<String, Object> calculateBreakEven(
+            Long cardAId,
+            Long cardBId,
+            Map<String, BigDecimal> monthlySpending,
+            Map<Long, RewardSelection> selectionsByCardId
+    ) {
+        Map<Long, RewardSelection> selections =
+                selectionsByCardId == null ? Map.of() : selectionsByCardId;
         if (cardAId == null || cardBId == null || cardAId.equals(cardBId)) {
             throw new IllegalArgumentException(
                     "Please select two different cards."
@@ -64,18 +84,22 @@ public class BreakEvenService {
                         new IllegalArgumentException("Card B not found.")
                 );
 
-        if (!cardCatalogueMode.includes(cardA)) {
+        if (!cardCatalogueEligibility.isEligible(cardA)) {
             throw new IllegalArgumentException("Card A not found.");
         }
-        if (!cardCatalogueMode.includes(cardB)) {
+        if (!cardCatalogueEligibility.isEligible(cardB)) {
             throw new IllegalArgumentException("Card B not found.");
         }
 
-        Map<String, RewardRule> rulesA = getRules(cardAId);
-        Map<String, RewardRule> rulesB = getRules(cardBId);
+        Map<String, EffectiveRewardRule> rulesA = getRules(
+                cardAId,
+                selections.getOrDefault(cardAId, RewardSelection.NONE));
+        Map<String, EffectiveRewardRule> rulesB = getRules(
+                cardBId,
+                selections.getOrDefault(cardBId, RewardSelection.NONE));
 
-        RewardRule groceryA = getRequiredRule(rulesA, "GROCERIES");
-        RewardRule groceryB = getRequiredRule(rulesB, "GROCERIES");
+        EffectiveRewardRule groceryA = getRequiredRule(rulesA, "GROCERIES");
+        EffectiveRewardRule groceryB = getRequiredRule(rulesB, "GROCERIES");
 
         BigDecimal fixedNetA = calculateOtherAnnualRewards(
                 rulesA, monthlySpending
@@ -374,17 +398,27 @@ public class BreakEvenService {
         return mergedIntervals;
     }
 
-    private Map<String, RewardRule> getRules(Long cardId) {
-        return rewardRuleRepository.findByCreditCardId(cardId)
+    private Map<String, EffectiveRewardRule> getRules(
+            Long cardId,
+            RewardSelection selection
+    ) {
+        List<RewardRule> rules =
+                rewardRuleRepository.findByCreditCardId(cardId);
+        CardSelectionPolicy policy = cardSelectionPolicyRepository
+                .findById(cardId)
+                .orElse(null);
+
+        return rewardRuleResolver.resolve(rules, policy, selection)
+                .entrySet()
                 .stream()
                 .collect(Collectors.toMap(
-                        rule -> rule.getSpendingCategory().toUpperCase(),
-                        Function.identity()
+                        entry -> entry.getKey().toUpperCase(),
+                        Map.Entry::getValue
                 ));
     }
 
     private BigDecimal calculateOtherAnnualRewards(
-            Map<String, RewardRule> rules,
+            Map<String, EffectiveRewardRule> rules,
             Map<String, BigDecimal> monthlySpending
     ) {
         BigDecimal total = BigDecimal.ZERO;
@@ -392,7 +426,7 @@ public class BreakEvenService {
         for (String category : SpendingCategories.FIXED) {
             BigDecimal monthlyAmount =
                     getRequiredSpending(monthlySpending, category);
-            RewardRule rule = getRequiredRule(rules, category);
+            EffectiveRewardRule rule = getRequiredRule(rules, category);
             total = total.add(
                     rewardCalculationService.calculateAnnualRewardPrecise(
                             rule,
@@ -405,8 +439,8 @@ public class BreakEvenService {
     }
 
     private BigDecimal difference(
-            RewardRule groceryA,
-            RewardRule groceryB,
+            RewardRuleTerms groceryA,
+            RewardRuleTerms groceryB,
             BigDecimal fixedNetA,
             BigDecimal fixedNetB,
             BigDecimal monthlyGroceries
@@ -429,7 +463,7 @@ public class BreakEvenService {
 
     private void addCapBoundary(
             TreeSet<BigDecimal> boundaries,
-            RewardRule rule
+            RewardRuleTerms rule
     ) {
         if (rule.getSpendingCap() == null) {
             return;
@@ -531,11 +565,11 @@ public class BreakEvenService {
         return amount;
     }
 
-    private RewardRule getRequiredRule(
-            Map<String, RewardRule> rules,
+    private EffectiveRewardRule getRequiredRule(
+            Map<String, EffectiveRewardRule> rules,
             String category
     ) {
-        RewardRule rule = rules.get(category);
+        EffectiveRewardRule rule = rules.get(category);
         if (rule == null) {
             throw new IllegalArgumentException(
                     "Missing reward rule for " + category

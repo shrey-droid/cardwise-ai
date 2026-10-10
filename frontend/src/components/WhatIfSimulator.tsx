@@ -2,18 +2,19 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import "./WhatIfSimulator.css";
 import type { Spending } from "../types/Spending";
+import {
+  isRankingProvisional,
+  type Recommendation,
+} from "../types/Recommendation";
+import type { RewardSelectionRequest } from "../types/RewardSelection";
+import {
+  appendRewardSelection,
+  requestKey,
+} from "../utils/rewardSelection";
 
 const CashbackComparisonChart = lazy(
   () => import("./CashbackComparisonChart")
 );
-
-type Recommendation = {
-  cardId: number;
-  cardName: string;
-  annualFee: number;
-  annualReward: number;
-  netAnnualReward: number;
-};
 
 type CreditCardOption = {
   id: number;
@@ -21,8 +22,24 @@ type CreditCardOption = {
   rewardType: string;
 };
 
+type LoadedRecommendations = {
+  key: string;
+  // The inputs other than groceries; the chart does not depend on groceries.
+  contextKey: string;
+  data: Recommendation[];
+};
+
+type Failure = {
+  key: string;
+  message: string;
+};
+
 type Props = {
   spending: Spending;
+  // Applied to every request so selections stay fixed as groceries change.
+  selection: RewardSelectionRequest | null;
+  // Range of the last consistent result; unaffected by pending updates.
+  sliderMax: number;
   breakEvenMonthlyGroceries: number | null;
 };
 
@@ -34,25 +51,49 @@ const formatMoney = (amount: number) =>
 
 export default function WhatIfSimulator({
   spending,
+  selection,
+  sliderMax,
   breakEvenMonthlyGroceries,
 }: Props) {
-  const [groceries, setGroceries] = useState(spending.groceries);
-  const [recommendations, setRecommendations] =
-    useState<Recommendation[]>([]);
+  const [requestedGroceries, setGroceries] = useState(spending.groceries);
+  // Clamped so a range change can never leave the value out of bounds.
+  const groceries = Math.min(requestedGroceries, sliderMax);
+  const [loaded, setLoaded] = useState<LoadedRecommendations | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
   const [availableCards, setAvailableCards] =
     useState<CreditCardOption[]>([]);
   const [cardsLoading, setCardsLoading] = useState(true);
   const [cardsError, setCardsError] = useState("");
   const [cardAId, setCardAId] = useState<number | null>(null);
   const [cardBId, setCardBId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const sliderMax = Math.max(
-    1000,
-    spending.groceries,
-    breakEvenMonthlyGroceries ?? 0
+  // Primitives keep effect dependencies stable across renders.
+  const selectionCardId = selection?.cardId ?? null;
+  const selectionCategories = selection?.value.categories.join(",") ?? "";
+  const selectionConfirmed =
+    selection?.value.extendedRequirementConfirmed ?? false;
+
+  const contextKey = requestKey(
+    spending.gas,
+    spending.dining,
+    spending.travel,
+    spending.other,
+    spending.transit,
+    spending.rideshare,
+    spending.evCharging,
+    selectionCardId,
+    selectionCategories,
+    selectionConfirmed
   );
+  const fullKey = requestKey(groceries, contextKey);
+
+  // Results are shown as current only if computed for exactly these inputs.
+  const recommendations = loaded?.data ?? [];
+  const isCurrent = loaded?.key === fullKey;
+  const contextCurrent = loaded?.contextKey === contextKey;
+  const error = failure?.key === fullKey ? failure.message : "";
+  const updating = !isCurrent && error === "";
 
   const breakEvenPosition =
     breakEvenMonthlyGroceries !== null
@@ -70,9 +111,6 @@ export default function WhatIfSimulator({
 
     // Debounce API calls when the slider moves.
     const timeout = setTimeout(async () => {
-      setLoading(true);
-      setError("");
-
       const params = new URLSearchParams({
         groceries: String(groceries),
         gas: String(spending.gas),
@@ -83,6 +121,15 @@ export default function WhatIfSimulator({
         rideshare: String(spending.rideshare),
         evCharging: String(spending.evCharging),
       });
+
+      if (selectionCardId !== null) {
+        appendRewardSelection(params, selectionCardId, {
+          categories: selectionCategories
+            ? selectionCategories.split(",")
+            : [],
+          extendedRequirementConfirmed: selectionConfirmed,
+        });
+      }
 
       try {
         const response = await fetch(
@@ -97,19 +144,18 @@ export default function WhatIfSimulator({
         const data: Recommendation[] = await response.json();
 
         if (!controller.signal.aborted) {
-          setRecommendations(data);
+          setLoaded({ key: fullKey, contextKey, data });
+          setFailure(null);
         }
       } catch (err) {
         if (!controller.signal.aborted) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Simulation failed."
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
+          setFailure({
+            key: fullKey,
+            message:
+              err instanceof Error
+                ? err.message
+                : "Simulation failed.",
+          });
         }
       }
     }, 300);
@@ -127,6 +173,12 @@ export default function WhatIfSimulator({
     spending.transit,
     spending.rideshare,
     spending.evCharging,
+    selectionCardId,
+    selectionCategories,
+    selectionConfirmed,
+    fullKey,
+    contextKey,
+    retryToken,
   ]);
 
   useEffect(() => {
@@ -198,6 +250,10 @@ export default function WhatIfSimulator({
 
   const bestCard = recommendations[0];
   const secondCard = recommendations[1];
+  const provisional = isCurrent && isRankingProvisional(recommendations);
+  const showRanking = isCurrent && !provisional;
+  const chartProvisional =
+    contextCurrent && isRankingProvisional(recommendations);
 
   const difference =
     bestCard && secondCard
@@ -218,6 +274,8 @@ export default function WhatIfSimulator({
       <p>
         Adjust your monthly grocery spending and compare
         the net annual rewards for each credit card.
+        These are estimates; actual rewards depend on issuer rules and
+        merchant classifications.
       </p>
 
       <div className="card-selection">
@@ -336,17 +394,50 @@ export default function WhatIfSimulator({
         </p>
       )}
 
-      {loading && (
-        <p className="simulator-loading">
+      {updating && recommendations.length === 0 && (
+        <p className="simulator-loading" role="status">
           Updating recommendations...
         </p>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+          {recommendations.length > 0 &&
+            " Showing the last successful results, which are outdated."}{" "}
+          <button
+            type="button"
+            className="simulator-retry"
+            onClick={() => {
+              setFailure(null);
+              setRetryToken((token) => token + 1);
+            }}
+          >
+            Retry
+          </button>
+        </p>
+      )}
 
       {recommendations.length > 0 && (
         <>
-          <div className="simulator-results">
+          {!isCurrent && !error && (
+            <p className="outdated-banner" role="status">
+              Updating: the figures below are outdated until the new
+              calculation finishes.
+            </p>
+          )}
+
+          {provisional && (
+            <p className="provisional-banner" role="status">
+              Provisional comparison: a card is missing part of its category
+              selection, so no card is marked as the best match.
+            </p>
+          )}
+
+          <div
+            className={`simulator-results${isCurrent ? "" : " is-outdated"}`}
+            aria-busy={!isCurrent}
+          >
             {recommendations.map((card, index) => (
               <div
                 className="simulator-result"
@@ -355,8 +446,12 @@ export default function WhatIfSimulator({
                 <div className="simulator-card-header">
                   <span>{card.cardName}</span>
 
-                  {index === 0 && (
+                  {index === 0 && showRanking && (
                     <span>Best Match</span>
+                  )}
+
+                  {card.selectionRequired && isCurrent && (
+                    <span>Incomplete estimate</span>
                   )}
                 </div>
 
@@ -371,7 +466,9 @@ export default function WhatIfSimulator({
             ))}
           </div>
 
-          <div className="simulator-chart">
+          <div
+            className={`simulator-chart${isCurrent ? "" : " is-outdated"}`}
+          >
             <h3>Annual Reward Comparison</h3>
 
             {recommendations.map((card) => {
@@ -422,11 +519,14 @@ export default function WhatIfSimulator({
                 cardAId={cardAId}
                 cardBId={cardBId}
                 sliderMax={sliderMax}
+                selection={selection}
+                provisional={chartProvisional}
+                outdated={!contextCurrent}
               />
             </Suspense>
           )}
 
-          {bestCard && secondCard && (
+          {bestCard && secondCard && showRanking && (
             <p className="simulator-summary">
               <strong>{bestCard.cardName}</strong> earns{" "}
               <strong>{formatMoney(difference)}</strong>{" "}

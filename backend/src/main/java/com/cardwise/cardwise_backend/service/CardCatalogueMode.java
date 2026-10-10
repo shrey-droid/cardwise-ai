@@ -23,7 +23,7 @@ public class CardCatalogueMode {
     }
 
     public boolean includes(CreditCard card) {
-        return card.isDemo() == demoMode;
+        return card.isDemo() == demoMode && !card.isCatalogueWithheld();
     }
 
     public boolean isDemoMode() {

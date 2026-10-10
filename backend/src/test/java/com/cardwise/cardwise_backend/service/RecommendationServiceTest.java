@@ -2,6 +2,7 @@ package com.cardwise.cardwise_backend.service;
 
 import com.cardwise.cardwise_backend.entity.CreditCard;
 import com.cardwise.cardwise_backend.entity.RewardRule;
+import com.cardwise.cardwise_backend.repository.CardSelectionPolicyRepository;
 import com.cardwise.cardwise_backend.repository.CreditCardRepository;
 import com.cardwise.cardwise_backend.repository.RewardRuleRepository;
 
@@ -27,6 +28,9 @@ class RecommendationServiceTest {
     @Mock
     private RewardRuleRepository rewardRuleRepository;
 
+    @Mock
+    private CardSelectionPolicyRepository cardSelectionPolicyRepository;
+
     private RecommendationService recommendationService;
 
     @BeforeEach
@@ -38,7 +42,13 @@ class RecommendationServiceTest {
                 creditCardRepository,
                 rewardRuleRepository,
                 rewardCalculationService,
-                new CardCatalogueMode("DEMO")
+                new CardCatalogueEligibility(
+                        new CardCatalogueMode("DEMO"),
+                        new SelectionPolicyViewService(
+                                cardSelectionPolicyRepository,
+                                rewardRuleRepository)),
+                cardSelectionPolicyRepository,
+                new RewardRuleResolver()
         );
     }
 
@@ -478,7 +488,13 @@ class RecommendationServiceTest {
                         creditCardRepository,
                         rewardRuleRepository,
                         new RewardCalculationService(),
-                        new CardCatalogueMode("REAL")
+                        new CardCatalogueEligibility(
+                                new CardCatalogueMode("REAL"),
+                                new SelectionPolicyViewService(
+                                        cardSelectionPolicyRepository,
+                                        rewardRuleRepository)),
+                        cardSelectionPolicyRepository,
+                        new RewardRuleResolver()
                 );
 
         List<Map<String, Object>> results =

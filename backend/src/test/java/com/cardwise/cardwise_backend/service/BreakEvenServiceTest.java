@@ -2,6 +2,7 @@ package com.cardwise.cardwise_backend.service;
 
 import com.cardwise.cardwise_backend.entity.CreditCard;
 import com.cardwise.cardwise_backend.entity.RewardRule;
+import com.cardwise.cardwise_backend.repository.CardSelectionPolicyRepository;
 import com.cardwise.cardwise_backend.repository.CreditCardRepository;
 import com.cardwise.cardwise_backend.repository.RewardRuleRepository;
 
@@ -28,6 +29,9 @@ class BreakEvenServiceTest {
     @Mock
     private RewardRuleRepository rewardRuleRepository;
 
+    @Mock
+    private CardSelectionPolicyRepository cardSelectionPolicyRepository;
+
         private RewardCalculationService rewardCalculationService;
 
     private BreakEvenService breakEvenService;
@@ -39,7 +43,13 @@ class BreakEvenServiceTest {
                 creditCardRepository,
                 rewardRuleRepository,
                 rewardCalculationService,
-                new CardCatalogueMode("DEMO")
+                new CardCatalogueEligibility(
+                        new CardCatalogueMode("DEMO"),
+                        new SelectionPolicyViewService(
+                                cardSelectionPolicyRepository,
+                                rewardRuleRepository)),
+                cardSelectionPolicyRepository,
+                new RewardRuleResolver()
         );
     }
 
@@ -708,7 +718,13 @@ class BreakEvenServiceTest {
                 creditCardRepository,
                 rewardRuleRepository,
                 rewardCalculationService,
-                new CardCatalogueMode("REAL")
+                new CardCatalogueEligibility(
+                        new CardCatalogueMode("REAL"),
+                        new SelectionPolicyViewService(
+                                cardSelectionPolicyRepository,
+                                rewardRuleRepository)),
+                cardSelectionPolicyRepository,
+                new RewardRuleResolver()
         );
 
         IllegalArgumentException exception = assertThrows(

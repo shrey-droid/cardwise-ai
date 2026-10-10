@@ -1,20 +1,31 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import CardRewardSelection from "./components/CardRewardSelection";
+import CardSource from "./components/CardSource";
 import WhatIfSimulator from "./components/WhatIfSimulator";
 import {
   BACKEND_SPENDING_CATEGORIES,
   type Spending,
 } from "./types/Spending";
+import {
+  isRankingProvisional,
+  type Recommendation,
+} from "./types/Recommendation";
+import {
+  EMPTY_SELECTION,
+  type CardCatalogueEntry,
+  type RewardSelectionRequest,
+  type SelectionsByCardId,
+} from "./types/RewardSelection";
+import {
+  appendRewardSelection,
+  reduceSelection,
+  requestKey,
+  selectionFromParts,
+  selectionParts,
+  type SelectionAction,
+} from "./utils/rewardSelection";
 import "./App.css";
-
-type Recommendation = {
-  cardId: number;
-  cardName: string;
-  annualFee: number;
-  annualReward: number;
-  netAnnualReward: number;
-  rewardBreakdown?: Record<string, number>;
-};
 
 type BreakEvenResult = {
   cardA: string;
@@ -24,6 +35,19 @@ type BreakEvenResult = {
   additionalMonthlyGroceries: number | null;
   status: string;
   recommendation: string;
+};
+
+type Analysis = {
+  key: string;
+  recommendations: Recommendation[];
+  breakEven: BreakEvenResult | null;
+  // Fixed per result so an outdated result keeps its slider range.
+  sliderMax: number;
+};
+
+type AnalysisFailure = {
+  key: string;
+  message: string;
 };
 
 const categories = BACKEND_SPENDING_CATEGORIES;
@@ -116,6 +140,22 @@ const formatMoney = (value: number) =>
     currency: "CAD",
   }).format(value);
 
+function generateProvisionalExplanation(card: Recommendation): string {
+  if (card.selectionRequired) {
+    return (
+      `This estimate is incomplete: ${card.cardName} does not yet have ` +
+      `all of its required bonus categories selected, so only baseline ` +
+      `rates are applied and its rewards are likely understated. Choose ` +
+      `its categories above to complete the estimate.`
+    );
+  }
+
+  return (
+    `This estimate is complete, but it cannot be ranked definitively ` +
+    `until every card with category choices has its selection completed.`
+  );
+}
+
 export default function App() {
   const [spending, setSpending] = useState<Spending>({
     groceries: 600,
@@ -128,13 +168,240 @@ export default function App() {
     evCharging: 0,
   });
 
-  const [recommendations, setRecommendations] =
-    useState<Recommendation[]>([]);
-  const [breakEven, setBreakEven] =
-    useState<BreakEvenResult | null>(null);
-
-  const [loading, setLoading] = useState(false);
+  // Both results come from one request key, so they always agree.
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [analysisFailure, setAnalysisFailure] =
+    useState<AnalysisFailure | null>(null);
+  const [requested, setRequested] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
   const [error, setError] = useState("");
+
+  const [catalogueCards, setCatalogueCards] =
+    useState<CardCatalogueEntry[]>([]);
+  const [cardsError, setCardsError] = useState("");
+  const [selections, setSelections] = useState<SelectionsByCardId>({});
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadCards() {
+      try {
+        const response = await fetch(
+          "/api/v1/cards?rewardType=CASHBACK",
+          { signal: controller.signal }
+        );
+
+        if (!response.ok) {
+          throw new Error("Unable to load card configuration.");
+        }
+
+        const cards: CardCatalogueEntry[] = await response.json();
+
+        if (!controller.signal.aborted) {
+          setCatalogueCards(cards);
+          setCardsError("");
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setCardsError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load card configuration."
+          );
+        }
+      }
+    }
+
+    // Deferred so React StrictMode's setup/cleanup pass can cancel first.
+    const timeout = window.setTimeout(() => {
+      void loadCards();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+
+  // The GET APIs carry one card's selection per request, so only the first
+  // selectable card gets a selector; the rest are reported, not dropped.
+  const selectableCards = catalogueCards.filter(
+    (card) => card.selectionPolicy
+  );
+  const activeCard = selectableCards[0];
+  const unsupportedCards = selectableCards.slice(1);
+  const activeSelection = activeCard
+    ? (selections[activeCard.id] ?? EMPTY_SELECTION)
+    : null;
+
+  const selectionRequest: RewardSelectionRequest | null =
+    activeCard && activeSelection
+      ? { cardId: activeCard.id, value: activeSelection }
+      : null;
+
+  // Primitive snapshot of the selection; effects and keys depend on this.
+  const {
+    cardId: selectionCardId,
+    categories: selectionCategories,
+    confirmed: selectionConfirmed,
+  } = selectionParts(selectionRequest);
+
+  const analysisKey = requestKey(
+    JSON.stringify(spending),
+    selectionCardId,
+    selectionCategories,
+    selectionConfirmed
+  );
+
+  const recommendations = analysis?.recommendations ?? [];
+  const breakEven = analysis?.breakEven ?? null;
+
+  // Results are current only if computed for exactly the inputs on screen.
+  const resultsCurrent = analysis !== null && analysis.key === analysisKey;
+  const failureMessage =
+    analysisFailure?.key === analysisKey ? analysisFailure.message : "";
+  const updating = requested && !resultsCurrent && failureMessage === "";
+  const provisional = resultsCurrent && isRankingProvisional(recommendations);
+  const showRanking = resultsCurrent && !provisional;
+  const hasDemoCard = recommendations.some(
+    (card) => catalogueCards.find((c) => c.id === card.cardId)?.demo
+  );
+
+  useEffect(() => {
+    if (!requested) return;
+
+    const controller = new AbortController();
+    const { signal } = controller;
+    const key = requestKey(
+      JSON.stringify(spending),
+      selectionCardId,
+      selectionCategories,
+      selectionConfirmed
+    );
+    const request = selectionFromParts({
+      cardId: selectionCardId,
+      categories: selectionCategories,
+      confirmed: selectionConfirmed,
+    });
+
+    // Debounced so rapid changes collapse; stale requests are aborted below.
+    const timeout = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams(
+          Object.entries(spending).map(([name, value]) => [
+            name,
+            String(value),
+          ])
+        );
+        if (request) {
+          appendRewardSelection(params, request.cardId, request.value);
+        }
+
+        const response = await fetch(
+          `/api/v1/recommendations?${params.toString()}`,
+          { signal }
+        );
+
+        if (!response.ok) {
+          throw new Error("Unable to fetch recommendations.");
+        }
+
+        const data: Recommendation[] = await response.json();
+
+        const groceryCard = data.find(
+          (card) => card.cardName === "Grocery Rewards Plus"
+        );
+        const everydayCard = data.find(
+          (card) => card.cardName === "Everyday Cashback"
+        );
+
+        // Demo pair when present; otherwise compare the top two cards.
+        const pair =
+          groceryCard && everydayCard
+            ? [groceryCard, everydayCard]
+            : data.length >= 2
+              ? [data[0], data[1]]
+              : null;
+
+        let breakEvenResult: BreakEvenResult | null = null;
+
+        if (pair) {
+          const breakEvenParams = new URLSearchParams({
+            cardAId: String(pair[0].cardId),
+            cardBId: String(pair[1].cardId),
+            groceries: String(spending.groceries),
+            gas: String(spending.gas),
+            dining: String(spending.dining),
+            travel: String(spending.travel),
+            other: String(spending.other),
+            transit: String(spending.transit),
+            rideshare: String(spending.rideshare),
+            evCharging: String(spending.evCharging),
+          });
+          if (request) {
+            appendRewardSelection(
+              breakEvenParams,
+              request.cardId,
+              request.value
+            );
+          }
+
+          try {
+            const breakEvenResponse = await fetch(
+              `/api/v1/break-even?${breakEvenParams.toString()}`,
+              { signal }
+            );
+
+            if (!breakEvenResponse.ok) {
+              throw new Error("Break-even API request failed");
+            }
+
+            breakEvenResult = await breakEvenResponse.json();
+          } catch (breakEvenError) {
+            if (signal.aborted) return;
+            console.error(
+              "Unable to load break-even analysis:",
+              breakEvenError
+            );
+          }
+        }
+
+        if (signal.aborted) return;
+        setAnalysis({
+          key,
+          recommendations: data,
+          breakEven: breakEvenResult,
+          sliderMax: Math.max(
+            1000,
+            spending.groceries,
+            breakEvenResult?.status === "BREAK_EVEN_FOUND"
+              ? (breakEvenResult.breakEvenMonthlyGroceries ?? 0)
+              : 0
+          ),
+        });
+        setAnalysisFailure(null);
+      } catch (err) {
+        if (signal.aborted) return;
+        setAnalysisFailure({
+          key,
+          message:
+            err instanceof Error ? err.message : "Something went wrong.",
+        });
+      }
+    }, 120);
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [
+    requested,
+    refreshToken,
+    spending,
+    selectionCardId,
+    selectionCategories,
+    selectionConfirmed,
+  ]);
 
   const updateSpending = (
     category: keyof Spending,
@@ -145,12 +412,13 @@ export default function App() {
       [category]: value,
     }));
 
-    // Hide old results when spending changes.
-    setRecommendations([]);
-    setBreakEven(null);
+    // Hide old results when spending changes; the effect aborts pending calls.
+    setRequested(false);
+    setAnalysis(null);
+    setAnalysisFailure(null);
   };
 
-  const findBestCard = async () => {
+  const findBestCard = () => {
     if (
       Object.values(spending).some(
         (amount) => !Number.isFinite(amount) || amount < 0
@@ -160,79 +428,32 @@ export default function App() {
       return;
     }
 
-    setLoading(true);
     setError("");
-    setRecommendations([]);
-    setBreakEven(null);
+    setAnalysisFailure(null);
+    setRequested(true);
+    setRefreshToken((token) => token + 1);
+  };
 
-    try {
-      const params = new URLSearchParams(
-        Object.entries(spending).map(([key, value]) => [
-          key,
-          String(value),
-        ])
-      );
+  const handleSelectionAction = (action: SelectionAction) => {
+    const policy = activeCard?.selectionPolicy;
+    if (!activeCard || !policy) return;
 
-      const response = await fetch(
-        `/api/v1/recommendations?${params.toString()}`
-      );
+    const cardId = activeCard.id;
+    const rules = {
+      baseSelectionLimit: policy.baseSelectionLimit,
+      extendedSelectionLimit: policy.extendedSelectionLimit,
+      offeredCodes: new Set(policy.selectableCategories.map((c) => c.code)),
+    };
 
-      if (!response.ok) {
-        throw new Error("Unable to fetch recommendations.");
-      }
-
-      const data: Recommendation[] = await response.json();
-      setRecommendations(data);
-
-      const groceryCard = data.find(
-        (card) => card.cardName === "Grocery Rewards Plus"
-      );
-
-      const everydayCard = data.find(
-        (card) => card.cardName === "Everyday Cashback"
-      );
-
-      if (groceryCard && everydayCard) {
-        const breakEvenParams = new URLSearchParams({
-          cardAId: String(groceryCard.cardId),
-          cardBId: String(everydayCard.cardId),
-          groceries: String(spending.groceries),
-          gas: String(spending.gas),
-          dining: String(spending.dining),
-          travel: String(spending.travel),
-          other: String(spending.other),
-          transit: String(spending.transit),
-          rideshare: String(spending.rideshare),
-          evCharging: String(spending.evCharging),
-        });
-
-        try {
-          const breakEvenResponse = await fetch(
-            `/api/v1/break-even?${breakEvenParams.toString()}`
-          );
-
-          if (!breakEvenResponse.ok) {
-            throw new Error("Break-even API request failed");
-          }
-
-          const result: BreakEvenResult =
-            await breakEvenResponse.json();
-
-          setBreakEven(result);
-        } catch (breakEvenError) {
-          console.error(
-            "Unable to load break-even analysis:",
-            breakEvenError
-          );
-        }
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Something went wrong."
-      );
-    } finally {
-      setLoading(false);
-    }
+    // Functional update: always applied to the latest state, never a snapshot.
+    setSelections((previous) => ({
+      ...previous,
+      [cardId]: reduceSelection(
+        previous[cardId] ?? EMPTY_SELECTION,
+        action,
+        rules
+      ),
+    }));
   };
 
   return (
@@ -266,29 +487,106 @@ export default function App() {
         </div>
       ))}
 
+      {cardsError && <p className="error">{cardsError}</p>}
+
+      {activeCard?.selectionPolicy && activeSelection && (
+        <section className="selection-section">
+          <CardRewardSelection
+            cardName={activeCard.cardName}
+            categories={activeCard.selectionPolicy.selectableCategories}
+            baseSelectionLimit={activeCard.selectionPolicy.baseSelectionLimit}
+            extendedSelectionLimit={
+              activeCard.selectionPolicy.extendedSelectionLimit
+            }
+            extendedRequirementLabel={
+              activeCard.selectionPolicy.extendedRequirementLabel
+            }
+            modelledCategoryCount={
+              activeCard.selectionPolicy.modelledCategoryCount
+            }
+            offeredCategoryCount={
+              activeCard.selectionPolicy.offeredCategoryCount
+            }
+            value={activeSelection}
+            onToggleCategory={(code) =>
+              handleSelectionAction({ type: "toggleCategory", code })
+            }
+            onExtendedChange={(confirmed) =>
+              handleSelectionAction({
+                type: "setExtendedConfirmed",
+                confirmed,
+              })
+            }
+          />
+
+          {activeCard.selectionPolicy.changeHoldDays !== null && (
+            <p className="selection-footnote">
+              Your selections describe what you want to compare. CardWise does
+              not verify your account settings, and the issuer may apply
+              category changes only after a{" "}
+              {activeCard.selectionPolicy.changeHoldDays}-day hold.
+            </p>
+          )}
+        </section>
+      )}
+
+      {unsupportedCards.length > 0 && (
+        <p className="selection-warning" role="alert">
+          Category selections for{" "}
+          {unsupportedCards.map((card) => card.cardName).join(", ")} cannot
+          be applied yet, because each request carries one card&apos;s
+          selections. Those cards are shown as incomplete estimates.
+        </p>
+      )}
+
       <button
         type="button"
         onClick={findBestCard}
-        disabled={loading}
+        disabled={updating}
       >
-        {loading
+        {updating
           ? "Finding Best Card..."
           : "Find My Best Credit Card"}
       </button>
 
       {error && <p className="error">{error}</p>}
 
+      {analysis && !resultsCurrent && (
+        <p
+          className="outdated-banner"
+          role={failureMessage ? "alert" : "status"}
+        >
+          {failureMessage
+            ? `Unable to update results: ${failureMessage} The figures below are from your previous inputs and are outdated.`
+            : "Updating results for your new selection. The figures below are outdated until the update finishes."}
+        </p>
+      )}
+
+      {!analysis && failureMessage && (
+        <p className="error" role="alert">
+          {failureMessage}
+        </p>
+      )}
+
       {breakEven && (
-        <section className="break-even-card">
+        <section
+          className={`break-even-card${resultsCurrent ? "" : " is-outdated"}`}
+          aria-busy={!resultsCurrent}
+        >
           <h2>Grocery Spending Break-Even Analysis</h2>
 
           {breakEven.status === "BREAK_EVEN_FOUND" &&
           breakEven.breakEvenMonthlyGroceries !== null ? (
             <>
-              <p>
-                Grocery Rewards Plus becomes more profitable
-                than Everyday Cashback above:
-              </p>
+              {breakEven.cardA === "Grocery Rewards Plus" &&
+              breakEven.cardB === "Everyday Cashback" ? (
+                <p>
+                  Grocery Rewards Plus becomes more profitable
+                  than Everyday Cashback above:
+                </p>
+              ) : (
+                <p>{breakEven.recommendation}</p>
+              )}
 
               <div className="break-even-amount">
                 {formatMoney(
@@ -333,12 +631,31 @@ export default function App() {
             Assumes other spending stays unchanged and
             cashback rates remain constant.
           </p>
+          {provisional && (
+            <p className="break-even-note provisional-note">
+              Provisional: this comparison uses an incomplete category
+              selection.
+            </p>
+          )}
         </section>
       )}
 
       {recommendations.length > 0 && (
-        <section className="results">
+        <section
+          className={`results${provisional ? " is-provisional" : ""}${
+            resultsCurrent ? "" : " is-outdated"
+          }`}
+          aria-busy={!resultsCurrent}
+        >
           <h2>Your Recommended Credit Cards</h2>
+
+          {provisional && (
+            <p className="provisional-banner" role="status">
+              Provisional ranking: at least one card still needs its category
+              selection, so no card is marked as the best match yet. Cards are
+              listed in provisional order of estimated rewards.
+            </p>
+          )}
 
           {recommendations.map((card, index) => (
             <article
@@ -347,15 +664,25 @@ export default function App() {
             >
               <div className="card-heading">
                 <h3>
-                  {index + 1}. {card.cardName}
+                  {showRanking
+                    ? `${index + 1}. ${card.cardName}`
+                    : card.cardName}
                 </h3>
 
-                {index === 0 && (
+                {index === 0 && showRanking && (
                   <span className="best-badge">
                     Best Match
                   </span>
                 )}
+
+                {card.selectionRequired && resultsCurrent && (
+                  <span className="incomplete-badge">
+                    Incomplete estimate
+                  </span>
+                )}
               </div>
+
+              <CardSource entry={catalogueCards.find((c) => c.id === card.cardId)} />
 
               <div className="reward-summary">
                 <div>
@@ -384,7 +711,15 @@ export default function App() {
               <div className="recommendation-explanation">
                 <h4>Why this card?</h4>
                 <p>
-                  {generateExplanation(card, recommendations[0], recommendations)}
+                  {!resultsCurrent
+                    ? "These figures are outdated and are being recalculated."
+                    : provisional
+                      ? generateProvisionalExplanation(card)
+                      : generateExplanation(
+                          card,
+                          recommendations[0],
+                          recommendations
+                        )}
                 </p>
               </div>
 
@@ -448,8 +783,14 @@ export default function App() {
           ))}
 
           <p className="disclaimer">
-            Estimates use fictional credit cards and simplified
-            reward rules for development.
+            CardWise AI provides estimated rewards based on publicly available
+            card terms and the spending information you enter. Actual rewards
+            depend on issuer eligibility rules, merchant classifications,
+            exclusions, and current terms. {hasDemoCard &&
+              "Demo cards are illustrative and are not real financial products. "}
+            Always verify details with the card issuer before applying.
+            CardWise AI is an independent tool and is not affiliated with,
+            endorsed by, or sponsored by any card issuer.
           </p>
         </section>
       )}
@@ -457,8 +798,10 @@ export default function App() {
       {recommendations.length > 0 && (
         <WhatIfSimulator
           spending={spending}
+          selection={selectionRequest}
+          sliderMax={analysis?.sliderMax ?? 1000}
           breakEvenMonthlyGroceries={
-            breakEven?.status === "BREAK_EVEN_FOUND"
+            resultsCurrent && breakEven?.status === "BREAK_EVEN_FOUND"
               ? breakEven.breakEvenMonthlyGroceries
               : null
           }

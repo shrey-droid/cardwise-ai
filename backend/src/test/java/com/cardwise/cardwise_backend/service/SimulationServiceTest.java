@@ -62,7 +62,7 @@ class SimulationServiceTest {
     }
 
     private void mockRecommendations() {
-        when(recommendationService.recommend(anyMap()))
+        when(recommendationService.recommend(anyMap(), anyMap()))
                 .thenAnswer(invocation -> {
                     Map<String, BigDecimal> scenario =
                             invocation.getArgument(0);
@@ -108,6 +108,7 @@ class SimulationServiceTest {
         when(breakEvenService.calculateBreakEven(
                 eq(cardAId),
                 eq(cardBId),
+                anyMap(),
                 anyMap()
         )).thenReturn(result);
     }
@@ -210,7 +211,7 @@ class SimulationServiceTest {
         assertEquals(22, points(result).size());
 
         verify(breakEvenService).calculateBreakEven(
-                eq(1L), eq(2L), anyMap()
+                eq(1L), eq(2L), anyMap(), anyMap()
         );
     }
 
@@ -296,7 +297,7 @@ class SimulationServiceTest {
 
     @Test
     void shouldReturnOnlySelectedCardRewards() {
-        when(recommendationService.recommend(anyMap()))
+        when(recommendationService.recommend(anyMap(), anyMap()))
                 .thenReturn(List.of(
                         Map.of(
                                 "cardId", 1L,
@@ -356,6 +357,7 @@ class SimulationServiceTest {
         when(breakEvenService.calculateBreakEven(
                 eq(2L),
                 eq(1L),
+                anyMap(),
                 anyMap()
         )).thenReturn(breakEvenResult);
 
@@ -420,6 +422,7 @@ class SimulationServiceTest {
         when(breakEvenService.calculateBreakEven(
                 eq(1L),
                 eq(2L),
+                anyMap(),
                 anyMap()
         )).thenReturn(breakEvenResult);
 
@@ -469,6 +472,7 @@ class SimulationServiceTest {
         when(breakEvenService.calculateBreakEven(
                 eq(1L),
                 eq(2L),
+                anyMap(),
                 anyMap()
         )).thenReturn(breakEvenResult);
 

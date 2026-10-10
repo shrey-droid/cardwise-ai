@@ -1,0 +1,172 @@
+.reward-selection {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  max-width: 560px;
+}
+
+.reward-selection-title {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: var(--primary);
+}
+
+.reward-selection-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.reward-selection-legend {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.reward-selection-count {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.reward-selection-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.reward-selection-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  background: var(--surface);
+}
+
+.reward-selection-option.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.reward-selection-option.is-blocked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.reward-selection-option:focus-within,
+.reward-selection-extended:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.reward-selection-label {
+  flex: 1;
+}
+
+.reward-selection-rate {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.reward-selection-option.is-selected .reward-selection-rate {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.reward-selection-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.reward-selection-extended {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.reward-selection-extended small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reward-selection-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f1f5f9;
+}
+
+.reward-selection-status-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.reward-selection-status.status-selected {
+  background: var(--accent-light);
+  color: #065f53;
+}
+
+.reward-selection-status.status-partial_selection {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.reward-selection-note {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.reward-selection-limitation {
+  padding: 10px 12px;
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+  color: #78350f;
+  border-radius: 0 8px 8px 0;
+}
+
+@media (max-width: 480px) {
+  .reward-selection {
+    padding: 16px;
+  }
+
+  .reward-selection-option {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    padding: 12px;
+  }
+
+  .reward-selection-label {
+    flex: 1 1 60%;
+    min-width: 0;
+  }
+
+  .reward-selection-rate {
+    margin-left: 28px;
+    flex-basis: 100%;
+  }
+}

@@ -30,6 +30,20 @@ public class SimulationService {
                         BigDecimal maxGroceries,
                         Long cardAId,
                         Long cardBId) {
+        return simulateGroceries(
+                monthlySpending, maxGroceries, cardAId, cardBId, Map.of());
+    }
+
+    // The same selections apply at every grocery-spending point.
+    public Map<String, Object> simulateGroceries(
+            Map<String, BigDecimal> monthlySpending,
+                        BigDecimal maxGroceries,
+                        Long cardAId,
+                        Long cardBId,
+                        Map<Long, RewardSelection> selectionsByCardId) {
+
+        Map<Long, RewardSelection> selections =
+                selectionsByCardId == null ? Map.of() : selectionsByCardId;
 
         if (monthlySpending == null) {
             throw new IllegalArgumentException(
@@ -72,7 +86,8 @@ public class SimulationService {
                     monthlySpending,
                     groceries,
                     cardAId,
-                    cardBId
+                    cardBId,
+                    selections
             ));
         }
 
@@ -80,7 +95,8 @@ public class SimulationService {
                 breakEvenService.calculateBreakEven(
                         cardAId,
                         cardBId,
-                        monthlySpending
+                        monthlySpending,
+                        selections
                 );
 
                 // Preserve the original single-crossover field.
@@ -127,7 +143,8 @@ public class SimulationService {
                                                 monthlySpending,
                                                 crossover,
                                                 cardAId,
-                                                cardBId
+                                                cardBId,
+                                                selections
                                 ));
                         }
                 }
@@ -171,14 +188,15 @@ public class SimulationService {
             Map<String, BigDecimal> monthlySpending,
             BigDecimal groceries,
             Long cardAId,
-            Long cardBId) {
+            Long cardBId,
+            Map<Long, RewardSelection> selections) {
 
         Map<String, BigDecimal> scenario =
                 new HashMap<>(monthlySpending);
         scenario.put("GROCERIES", groceries);
 
         List<Map<String, Object>> recommendations =
-                recommendationService.recommend(scenario);
+                recommendationService.recommend(scenario, selections);
 
         Map<String, Object> rewards = new LinkedHashMap<>();
         for (Map<String, Object> card : recommendations) {

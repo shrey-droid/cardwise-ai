@@ -36,7 +36,11 @@ public class SimulationController {
             @RequestParam(defaultValue = "1000")
             BigDecimal maxGroceries,
             @RequestParam(defaultValue = "2") Long cardAId,
-            @RequestParam(defaultValue = "1") Long cardBId) {
+            @RequestParam(defaultValue = "1") Long cardBId,
+            @RequestParam(required = false) String cardId,
+            @RequestParam(required = false) String selectedCategories,
+            @RequestParam(required = false)
+            String extendedRequirementConfirmed) {
 
         Map<String, BigDecimal> monthlySpending = new HashMap<>();
         monthlySpending.put("GROCERIES", groceries);
@@ -52,7 +56,12 @@ public class SimulationController {
                 monthlySpending,
             maxGroceries,
             cardAId,
-            cardBId
+            cardBId,
+            RewardSelectionRequestParser.parse(
+                    cardId,
+                    selectedCategories,
+                    extendedRequirementConfirmed
+            )
         );
     }
 

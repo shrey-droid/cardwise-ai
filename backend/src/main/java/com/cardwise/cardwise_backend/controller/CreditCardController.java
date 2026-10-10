@@ -2,7 +2,8 @@ package com.cardwise.cardwise_backend.controller;
 
 import com.cardwise.cardwise_backend.entity.CreditCard;
 import com.cardwise.cardwise_backend.repository.CreditCardRepository;
-import com.cardwise.cardwise_backend.service.CardCatalogueMode;
+import com.cardwise.cardwise_backend.service.CardCatalogueEligibility;
+import com.cardwise.cardwise_backend.service.SelectionPolicyViewService;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,29 +17,35 @@ import java.util.List;
 public class CreditCardController {
 
     private final CreditCardRepository repository;
-    private final CardCatalogueMode cardCatalogueMode;
+    private final CardCatalogueEligibility cardCatalogueEligibility;
+    private final SelectionPolicyViewService selectionPolicyViewService;
 
     public CreditCardController(
             CreditCardRepository repository,
-            CardCatalogueMode cardCatalogueMode) {
+            CardCatalogueEligibility cardCatalogueEligibility,
+            SelectionPolicyViewService selectionPolicyViewService) {
         this.repository = repository;
-        this.cardCatalogueMode = cardCatalogueMode;
+        this.cardCatalogueEligibility = cardCatalogueEligibility;
+        this.selectionPolicyViewService = selectionPolicyViewService;
     }
 
     @GetMapping
-    public List<CreditCard> getAllCards(
+    public List<CardResponse> getAllCards(
             @RequestParam(required = false) String rewardType) {
 
-        if (rewardType == null || rewardType.isBlank()) {
-            return repository.findAll().stream()
-                .filter(cardCatalogueMode::includes)
-                .toList();
-        }
+        List<CreditCard> cards =
+                (rewardType == null || rewardType.isBlank())
+                        ? repository.findAll()
+                        : repository.findByRewardTypeIgnoreCase(
+                                rewardType.trim());
 
-        return repository.findByRewardTypeIgnoreCase(
-                rewardType.trim()
-            ).stream()
-            .filter(cardCatalogueMode::includes)
-            .toList();
+        // Policies are looked up only after the catalogue filter.
+        return cards.stream()
+                .filter(cardCatalogueEligibility::isEligible)
+                .map(card -> new CardResponse(
+                        card,
+                        selectionPolicyViewService.forCard(card)
+                                .orElse(null)))
+                .toList();
     }
 }

@@ -31,7 +31,11 @@ public class BreakEvenController {
                         @RequestParam BigDecimal other,
                         @RequestParam(defaultValue = "0") BigDecimal transit,
                         @RequestParam(defaultValue = "0") BigDecimal rideshare,
-                        @RequestParam(defaultValue = "0") BigDecimal evCharging
+                        @RequestParam(defaultValue = "0") BigDecimal evCharging,
+                        @RequestParam(required = false) String cardId,
+                        @RequestParam(required = false) String selectedCategories,
+                        @RequestParam(required = false)
+                        String extendedRequirementConfirmed
     ) {
         Map<String, BigDecimal> spending = Map.of(
                 "GROCERIES", groceries,
@@ -47,7 +51,12 @@ public class BreakEvenController {
         return breakEvenService.calculateBreakEven(
                 cardAId,
                 cardBId,
-                spending
+                spending,
+                RewardSelectionRequestParser.parse(
+                        cardId,
+                        selectedCategories,
+                        extendedRequirementConfirmed
+                )
         );
     }
 

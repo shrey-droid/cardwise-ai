@@ -1,6 +1,7 @@
 package com.cardwise.cardwise_backend.entity;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,6 +28,10 @@ public class CreditCard {
 
     @Column(name = "is_demo", nullable = false)
     private boolean demo;
+
+    @JsonIgnore
+    @Column(name = "catalogue_withheld", nullable = false)
+    private boolean catalogueWithheld;
 
     @Column(name = "minimum_personal_income", precision = 12, scale = 2)
     private BigDecimal minimumPersonalIncome;
@@ -61,6 +66,11 @@ public class CreditCard {
 
     public boolean isDemo() { return demo; }
     public void setDemo(boolean demo) { this.demo = demo; }
+
+    public boolean isCatalogueWithheld() { return catalogueWithheld; }
+    public void setCatalogueWithheld(boolean catalogueWithheld) {
+        this.catalogueWithheld = catalogueWithheld;
+    }
 
     public BigDecimal getMinimumPersonalIncome() {
         return minimumPersonalIncome;

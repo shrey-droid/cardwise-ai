@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Spending } from "../types/Spending";
+import type { RewardSelectionRequest } from "../types/RewardSelection";
+import { appendRewardSelection } from "../utils/rewardSelection";
 
 import {
   CartesianGrid,
@@ -49,6 +51,10 @@ type Props = {
   cardAId: number;
   cardBId: number;
   sliderMax: number;
+  selection: RewardSelectionRequest | null;
+  provisional: boolean;
+  // True while the parent's recommendations don't match this selection yet.
+  outdated: boolean;
 };
 
 type LoadedSimulation = {
@@ -73,12 +79,20 @@ export default function CashbackComparisonChart({
   cardAId,
   cardBId,
   sliderMax,
+  selection,
+  provisional,
+  outdated,
 }: Props) {
   const [loadedSimulation, setLoadedSimulation] =
     useState<LoadedSimulation | null>(null);
   const [simulationError, setSimulationError] =
     useState<SimulationError | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
+
+  const selectionCardId = selection?.cardId ?? null;
+  const selectionCategories = selection?.value.categories.join(",") ?? "";
+  const selectionConfirmed =
+    selection?.value.extendedRequirementConfirmed ?? false;
 
   const requestKey = [
     cardAId,
@@ -91,6 +105,9 @@ export default function CashbackComparisonChart({
     spending.rideshare,
     spending.evCharging,
     sliderMax,
+    selectionCardId === null
+      ? "no-selection"
+      : [selectionCardId, selectionCategories, selectionConfirmed].join(":"),
   ].join("|");
 
   const simulation =
@@ -119,6 +136,13 @@ export default function CashbackComparisonChart({
       evCharging: String(spending.evCharging),
       maxGroceries: String(sliderMax),
     });
+
+    if (selectionCardId !== null) {
+      appendRewardSelection(params, selectionCardId, {
+        categories: selectionCategories ? selectionCategories.split(",") : [],
+        extendedRequirementConfirmed: selectionConfirmed,
+      });
+    }
 
     const timeout = setTimeout(async () => {
       setLoadingKey(requestKey);
@@ -175,6 +199,9 @@ export default function CashbackComparisonChart({
     spending.evCharging,
     sliderMax,
     requestKey,
+    selectionCardId,
+    selectionCategories,
+    selectionConfirmed,
   ]);
 
   const first = availableCards.find(
@@ -230,11 +257,24 @@ export default function CashbackComparisonChart({
         monthly grocery spending amounts.
       </p>
 
-      {loading && <p>Loading simulation chart...</p>}
+      {(loading || outdated) && !error && (
+        <p className="simulator-chart-note" role="status">
+          Updating comparison chart...
+        </p>
+      )}
 
-      {error && <p className="error">{error}</p>}
+      {provisional && !outdated && (
+        <p className="provisional-banner" role="status">
+          Provisional: these lines use an incomplete category selection, so
+          the comparison below is not definitive.
+        </p>
+      )}
 
-      {!loading && !error && data.length > 0 && (
+      {error && (
+        <p className="error" role="alert">{error}</p>
+      )}
+
+      {!loading && !outdated && !error && data.length > 0 && (
         <div className="cashback-chart-container">
           <ResponsiveContainer width="100%" height={320}>
             <LineChart
@@ -331,7 +371,7 @@ export default function CashbackComparisonChart({
         </div>
       )}
 
-      {!loading && !error && simulation && (
+      {!loading && !outdated && !error && simulation && (
         <>
           <p className="simulator-chart-note">
             {simulation.recommendation}

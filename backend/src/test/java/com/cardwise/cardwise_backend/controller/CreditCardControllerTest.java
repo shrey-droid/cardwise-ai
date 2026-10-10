@@ -2,7 +2,8 @@ package com.cardwise.cardwise_backend.controller;
 
 import com.cardwise.cardwise_backend.entity.CreditCard;
 import com.cardwise.cardwise_backend.repository.CreditCardRepository;
-import com.cardwise.cardwise_backend.service.CardCatalogueMode;
+import com.cardwise.cardwise_backend.service.CardCatalogueEligibility;
+import com.cardwise.cardwise_backend.service.SelectionPolicyViewService;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,7 +30,10 @@ class CreditCardControllerTest {
     private CreditCardRepository repository;
 
     @MockitoBean
-    private CardCatalogueMode cardCatalogueMode;
+    private CardCatalogueEligibility cardCatalogueEligibility;
+
+    @MockitoBean
+    private SelectionPolicyViewService selectionPolicyViewService;
 
     @Test
     void shouldReturnAllCardsWithoutFilter() throws Exception {
@@ -49,8 +54,8 @@ class CreditCardControllerTest {
         realCard.setDemo(false);
 
         when(repository.findAll()).thenReturn(List.of(demoCard, realCard));
-        when(cardCatalogueMode.includes(demoCard)).thenReturn(false);
-        when(cardCatalogueMode.includes(realCard)).thenReturn(true);
+        when(cardCatalogueEligibility.isEligible(demoCard)).thenReturn(false);
+        when(cardCatalogueEligibility.isEligible(realCard)).thenReturn(true);
 
         mockMvc.perform(get("/api/v1/cards"))
                 .andExpect(status().isOk())
@@ -108,5 +113,23 @@ class CreditCardControllerTest {
             .andExpect(jsonPath("$").isArray());
 
         verify(repository).findAll();
+    }
+
+    @Test
+    void shouldNotLookUpPoliciesForCardsOutsideTheCatalogue()
+            throws Exception {
+        CreditCard withheld = new CreditCard();
+        CreditCard visible = new CreditCard();
+
+        when(repository.findAll()).thenReturn(List.of(withheld, visible));
+        when(cardCatalogueEligibility.isEligible(withheld)).thenReturn(false);
+        when(cardCatalogueEligibility.isEligible(visible)).thenReturn(true);
+
+        mockMvc.perform(get("/api/v1/cards"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        verify(selectionPolicyViewService).forCard(visible);
+        verify(selectionPolicyViewService, never()).forCard(withheld);
     }
 }

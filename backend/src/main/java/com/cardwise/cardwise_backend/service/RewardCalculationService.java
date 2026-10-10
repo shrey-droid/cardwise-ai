@@ -1,6 +1,5 @@
 package com.cardwise.cardwise_backend.service;
 
-import com.cardwise.cardwise_backend.entity.RewardRule;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -10,7 +9,7 @@ import java.math.RoundingMode;
 public class RewardCalculationService {
 
     public BigDecimal calculateAnnualReward(
-            RewardRule rule,
+            RewardRuleTerms rule,
             BigDecimal monthlySpending
     ) {
         return calculateAnnualRewardPrecise(rule, monthlySpending)
@@ -18,7 +17,7 @@ public class RewardCalculationService {
     }
 
             public BigDecimal calculateAnnualRewardPrecise(
-                RewardRule rule,
+                RewardRuleTerms rule,
                 BigDecimal monthlySpending
             ) {
             if (rule == null || monthlySpending == null
